@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cururo-editor"
+version = "0.1.0"
+description = "Cururo Editor - Creador y editor de video juegos 2D"
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+exclude = ["build", "__pycache__", "*.pyc"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"

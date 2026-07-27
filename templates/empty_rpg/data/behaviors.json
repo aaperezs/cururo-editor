@@ -1,0 +1,128 @@
+{
+  "decorative": {
+    "label": "Decorativo",
+    "group": "decoracion",
+    "class_path": null,
+    "target_list": null,
+    "properties": {
+      "animation": {"type": "string", "default": "", "label": "Animacion"}
+    }
+  },
+  "spawn": {
+    "label": "Spawn",
+    "group": "decoracion",
+    "class_path": null,
+    "target_list": null,
+    "properties": {}
+  },
+  "suelo": {
+    "label": "Suelo",
+    "group": "terreno",
+    "class_path": "entities.suelo.Suelo",
+    "target_list": "suelos",
+    "properties": {
+      "no_food_spawn": {"type": "bool", "default": false, "label": "Sin comida"}
+    }
+  },
+  "bloqueante": {
+    "label": "Bloqueante",
+    "group": "obstaculos",
+    "class_path": "entities.objeto_colision.ObjetoBloqueante",
+    "target_list": "collidables",
+    "properties": {
+      "solid": {"type": "bool", "default": true, "label": "Solido"},
+      "destructible": {"type": "bool", "default": false, "label": "Destructible"},
+      "destructible_hp": {"type": "int", "default": 2, "label": "HP", "min": 1},
+      "pushable": {"type": "bool", "default": false, "label": "Empujable"},
+      "animation": {"type": "string", "default": "", "label": "Animacion"},
+      "cracked_sprite": {"type": "string", "default": "", "label": "Sprite agrietado"}
+    }
+  },
+  "peligroso": {
+    "label": "Peligroso",
+    "group": "obstaculos",
+    "class_path": "entities.objeto_colision.ObjetoPeligroso",
+    "target_list": "collidables",
+    "properties": {
+      "solid": {"type": "bool", "default": true, "label": "Solido"},
+      "damage_type": {"type": "choice", "options": ["mata", "danio"], "default": "mata", "label": "Tipo danio"},
+      "animation": {"type": "string", "default": "", "label": "Animacion"}
+    }
+  },
+  "hierba": {
+    "label": "Hierba",
+    "group": "decoracion",
+    "class_path": "entities.hierba_alta.HierbaAlta",
+    "target_list": "hierba_alta",
+    "properties": {
+      "solid": {"type": "bool", "default": false, "label": "Solido"},
+      "animation": {"type": "string", "default": "", "label": "Animacion"}
+    }
+  },
+  "food": {
+    "label": "Comida",
+    "group": "items",
+    "class_path": "entities.food.Food",
+    "target_list": "comidas",
+    "properties": {
+      "solid": {"type": "bool", "default": false, "label": "Solido"},
+      "food_type": {"type": "choice", "options": ["normal", "mana", "dorada"], "default": "normal", "label": "Tipo comida"},
+      "animation": {"type": "string", "default": "", "label": "Animacion"}
+    }
+  },
+  "cofre": {
+    "label": "Cofre",
+    "group": "items",
+    "class_path": "entities.cofre.Cofre",
+    "target_list": "cofres",
+    "properties": {
+      "solid": {"type": "bool", "default": false, "label": "Solido"},
+      "tesoro": {"type": "string", "default": "cofre_oculto_1", "label": "Tesoro ID"}
+    }
+  },
+  "enemigo_melee": {
+    "label": "Enemigo melee",
+    "group": "enemigos",
+    "class_path": "entities.enemigos.EnemyMelee",
+    "target_list": "enemigos",
+    "properties": {
+      "solid": {"type": "bool", "default": true, "label": "Solido"},
+      "damage_type": {"type": "choice", "options": ["mata", "danio"], "default": "mata", "label": "Tipo danio"},
+      "destructible": {"type": "bool", "default": true, "label": "Destructible"},
+      "patron": {"type": "choice", "options": ["vertical", "horizontal", "circular"], "default": "vertical", "label": "Patron"},
+      "drops": {"type": "drop_list", "default": [], "label": "Drops"}
+    }
+  },
+  "enemigo_shooter": {
+    "label": "Enemigo shooter",
+    "group": "enemigos",
+    "class_path": "entities.enemigos.Eldir",
+    "target_list": "enemigos",
+    "properties": {
+      "solid": {"type": "bool", "default": true, "label": "Solido"},
+      "damage_type": {"type": "choice", "options": ["mata", "danio"], "default": "mata", "label": "Tipo danio"},
+      "destructible": {"type": "bool", "default": true, "label": "Destructible"},
+      "patron": {"type": "choice", "options": ["shooter_h", "shooter_v"], "default": "shooter_h", "label": "Patron"},
+      "drops": {"type": "drop_list", "default": [], "label": "Drops"}
+    }
+  },
+  "boss": {
+    "label": "Jefe",
+    "group": "enemigos",
+    "class_path": "entities.boss.Boss",
+    "target_list": "jefes",
+    "properties": {
+      "solid": {"type": "bool", "default": false, "label": "Solido"}
+    }
+  },
+  "multi_tile": {
+    "label": "Multi-tile",
+    "group": "decoracion",
+    "class_path": null,
+    "target_list": null,
+    "properties": {
+      "tile_rows": {"type": "int", "default": 1, "label": "Filas", "min": 1, "max": 2},
+      "tile_cols": {"type": "int", "default": 1, "label": "Columnas", "min": 1, "max": 2}
+    }
+  }
+}
