@@ -1,0 +1,8 @@
+{
+    "name": "Snake RPG",
+    "id": "snake_rpg_template",
+    "category": "snake_rpg",
+    "window": {
+        "fullscreen": false
+    }
+}

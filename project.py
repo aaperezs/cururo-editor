@@ -15,6 +15,26 @@ class Project:
         self._manifest = self._load_manifest()
         self.name = self._manifest.get("name", os.path.basename(self.root))
         self.project_id = self._manifest.get("id", os.path.basename(self.root))
+        self.category = self._manifest.get("category", "blank")
+        self.platform = self._manifest.get("platform", "desktop")
+        self.quality = self._manifest.get("quality", "medium")
+        self._window = self._manifest.get("window")
+        if not isinstance(self._window, dict):
+            self._window = {}
+        self.window_title = self._window.get("title", self.name)
+        self.window_fullscreen = bool(self._window.get("fullscreen", False))
+        self.resolution = self._parse_resolution(self._manifest.get("resolution", "800x600"))
+
+    def _parse_resolution(self, value):
+        try:
+            if isinstance(value, dict):
+                w = int(value.get("w", 800))
+                h = int(value.get("h", 600))
+                return (w, h)
+            w, h = str(value).strip().lower().replace(" ", "").split("x")
+            return (int(w), int(h))
+        except (ValueError, AttributeError):
+            return (800, 600)
 
     def _load_manifest(self):
         if os.path.exists(self._manifest_path):
@@ -33,6 +53,37 @@ class Project:
 
     def stacks_path(self, *parts):
         return os.path.join(self.root, "levels", "mapas_stacks", *parts)
+
+    def get_available_panels(self):
+        from editor.categories import get_panels_for_category
+        return get_panels_for_category(self.category)
+
+    def update_config(self, platform=None, quality=None, window_title=None, fullscreen=None,
+                      resolution=None):
+        if platform in ("desktop", "mobile"):
+            self._manifest["platform"] = platform
+        if quality in ("low", "medium", "high"):
+            self._manifest["quality"] = quality
+        if resolution:
+            try:
+                w, h = str(resolution).strip().lower().replace(" ", "").split("x")
+                self._manifest["resolution"] = f"{int(w)}x{int(h)}"
+            except (ValueError, AttributeError):
+                pass
+        if window_title is not None:
+            window = self._manifest.get("window")
+            if not isinstance(window, dict):
+                window = {}
+            window["title"] = (window_title or "").strip() or self.name
+            self._manifest["window"] = window
+        if fullscreen is not None:
+            window = self._manifest.get("window")
+            if not isinstance(window, dict):
+                window = {}
+            window["fullscreen"] = bool(fullscreen)
+            self._manifest["window"] = window
+        with open(self._manifest_path, "w", encoding="utf-8") as f:
+            json.dump(self._manifest, f, indent=2, ensure_ascii=False)
 
 
 def set_current_project(path):
@@ -71,13 +122,14 @@ def discover_projects(search_dir):
                     "path": full,
                     "name": data.get("name", entry),
                     "id": data.get("id", entry),
+                    "category": data.get("category", "blank"),
                 })
             except (json.JSONDecodeError, IOError):
                 pass
     return results
 
 
-def list_templates():
+def list_templates(category=None):
     results = []
     if not os.path.isdir(TEMPLATES_DIR):
         return results
@@ -88,17 +140,26 @@ def list_templates():
             try:
                 with open(manifest, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                tpl_cat = data.get("category", "blank")
+                if category is not None and tpl_cat != category:
+                    continue
                 results.append({
                     "id": entry,
                     "name": data.get("name", entry),
                     "path": full,
+                    "category": tpl_cat,
                 })
             except (json.JSONDecodeError, IOError):
                 pass
     return results
 
 
-def create_project(template_id, project_name, target_dir):
+def get_templates_for_category(category_id):
+    return list_templates(category=category_id)
+
+
+def create_project(template_id, project_name, target_dir, platform="desktop",
+                   quality="medium", window_title=None, resolution="800x600"):
     template_path = os.path.join(TEMPLATES_DIR, template_id)
     if not os.path.isdir(template_path):
         return None
@@ -120,6 +181,18 @@ def create_project(template_id, project_name, target_dir):
         manifest["name"] = project_name
         safe_id = project_name.lower().replace(" ", "_").replace("-", "_")
         manifest["id"] = safe_id
+        manifest["platform"] = platform if platform in ("desktop", "mobile") else "desktop"
+        manifest["quality"] = quality if quality in ("low", "medium", "high") else "medium"
+        try:
+            rw, rh = str(resolution).strip().lower().replace(" ", "").split("x")
+            manifest["resolution"] = f"{int(rw)}x{int(rh)}"
+        except (ValueError, AttributeError):
+            manifest["resolution"] = "800x600"
+        window = manifest.get("window")
+        if not isinstance(window, dict):
+            window = {}
+        window["title"] = (window_title or "").strip() or project_name
+        manifest["window"] = window
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
 

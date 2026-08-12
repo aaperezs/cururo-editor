@@ -1,0 +1,20 @@
+{
+  "dialogo": {
+    "label": "Dialogo",
+    "group": "narrativa",
+    "class_path": null,
+    "target_list": null,
+    "properties": {
+      "texto": {"type": "string", "default": "", "label": "Texto"}
+    }
+  },
+  "choice": {
+    "label": "Opcion",
+    "group": "narrativa",
+    "class_path": null,
+    "target_list": null,
+    "properties": {
+      "options": {"type": "string", "default": "", "label": "Opciones (separadas por |)"}
+    }
+  }
+}

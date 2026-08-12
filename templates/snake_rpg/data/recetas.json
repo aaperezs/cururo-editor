@@ -1,0 +1,26 @@
+{
+  "tiara_alada": {
+    "nombre": "Tiara Alada",
+    "requiere": { "mineral_hierro": 3, "gema_azul": 1 },
+    "resultado": "tiara_alada",
+    "descripcion": "Forja una tiara que desaf\u00eda la gravedad"
+  },
+  "anillo_del_bosque": {
+    "nombre": "Anillo del Bosque",
+    "requiere": { "mineral_hierro": 2, "escamas": 5 },
+    "resultado": "anillo_del_bosque",
+    "descripcion": "Un anillo imbuido con la velocidad del bosque"
+  },
+  "colgante_runico": {
+    "nombre": "Colgante R\u00fanico",
+    "requiere": { "gema_azul": 2, "mineral_hierro": 1, "escamas": 10 },
+    "resultado": "colgante_runico",
+    "descripcion": "Canaliza energ\u00eda r\u00fanica para regenerar PP"
+  },
+  "bota_de_hierro": {
+    "nombre": "Bota de Hierro",
+    "requiere": { "mineral_hierro": 4 },
+    "resultado": "bota_de_hierro",
+    "descripcion": "Botas firmes que no resbalan en el hielo"
+  }
+}

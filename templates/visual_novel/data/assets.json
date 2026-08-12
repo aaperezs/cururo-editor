@@ -1,0 +1,51 @@
+{
+  "fondo_ejemplo": {
+    "nombre": "Fondo ejemplo",
+    "tipo": "background",
+    "archivo": "fondo_ejemplo.png",
+    "modo_posicion": "fill",
+    "desbloqueo_flag": ""
+  },
+  "runa_normal": {
+    "nombre": "Runa normal",
+    "tipo": "character",
+    "archivo": "personajes/runa_normal.png",
+    "modo_posicion": "center",
+    "desbloqueo_flag": ""
+  },
+  "runa_feliz": {
+    "nombre": "Runa feliz",
+    "tipo": "character",
+    "archivo": "personajes/runa_feliz.png",
+    "modo_posicion": "center",
+    "desbloqueo_flag": ""
+  },
+  "runa_triste": {
+    "nombre": "Runa triste",
+    "tipo": "character",
+    "archivo": "personajes/runa_triste.png",
+    "modo_posicion": "center",
+    "desbloqueo_flag": ""
+  },
+  "runa_enojado": {
+    "nombre": "Runa enojado",
+    "tipo": "character",
+    "archivo": "personajes/runa_enojado.png",
+    "modo_posicion": "center",
+    "desbloqueo_flag": ""
+  },
+  "runa_sonrojado": {
+    "nombre": "Runa sonrojado",
+    "tipo": "character",
+    "archivo": "personajes/runa_sonrojado.png",
+    "modo_posicion": "center",
+    "desbloqueo_flag": ""
+  },
+  "runa_sorpresa": {
+    "nombre": "Runa sorpresa",
+    "tipo": "character",
+    "archivo": "personajes/runa_sorpresa.png",
+    "modo_posicion": "center",
+    "desbloqueo_flag": ""
+  }
+}

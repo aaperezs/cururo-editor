@@ -1,0 +1,24 @@
+{
+  "chapters": [
+    {
+      "id": "capitulo_1",
+      "nombre": "Capitulo 1",
+      "escenas": [
+        {
+          "id": "escena_1",
+          "tipo": "dialogo",
+          "dialogo_id": "runa/saludo",
+          "nivel_id": "",
+          "asset_id": "",
+          "condicion_entrada": {}
+        }
+      ]
+    }
+  ],
+  "titulo": {
+    "enabled": false,
+    "fondo": "",
+    "titulo": "Mi Novela Visual",
+    "subtitulo": "Presiona ENTER para comenzar"
+  }
+}

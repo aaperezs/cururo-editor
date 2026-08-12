@@ -1,0 +1,25 @@
+{
+  "item_nuevo": {
+    "nombre": "item_nuevo",
+    "descripcion": "Tiara verde",
+    "sprite_id": "tiara",
+    "slot": "cabeza",
+    "rareza": "comun",
+    "efectos": [
+      {
+        "tipo": "velocidad_extra",
+        "valor": 10.0
+      }
+    ]
+  },
+  "key_willow": {
+    "nombre": "key willow",
+    "descripcion": "Llave de la morada de willow",
+    "sprite_id": "tiara",
+    "slot": "",
+    "rareza": "comun",
+    "efectos": [],
+    "tipo": "objeto_clave",
+    "key_id": "key_willow"
+  }
+}

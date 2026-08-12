@@ -1,0 +1,18 @@
+{
+    "name": "Novela Visual",
+    "id": "visual_novel_template",
+    "category": "visual_novel",
+    "window": {
+        "fullscreen": false
+    },
+    "screens": {
+        "enabled": true,
+        "items": ["title"],
+        "config": {
+            "title": {
+                "duration_ms": 0,
+                "enabled": true
+            }
+        }
+    }
+}

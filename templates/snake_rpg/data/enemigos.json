@@ -1,0 +1,79 @@
+{
+  "melee": {
+    "horizontal": {
+      "velocidad": 1,
+      "patron": "horizontal",
+      "color": [255, 0, 0],
+      "descripcion": "Se mueve horizontalmente, rebota en bordes"
+    },
+    "vertical": {
+      "velocidad": 1,
+      "patron": "vertical",
+      "color": [255, 0, 0],
+      "descripcion": "Se mueve verticalmente, rebota en bordes"
+    },
+    "circular": {
+      "velocidad": 1,
+      "patron": "circular",
+      "color": [255, 0, 0],
+      "descripcion": "Se mueve en c\u00edrculo"
+    },
+    "horizontal_rapido": {
+      "velocidad": 2,
+      "patron": "horizontal",
+      "color": [255, 100, 100],
+      "descripcion": "Se mueve horizontalmente r\u00e1pido"
+    },
+    "vertical_rapido": {
+      "velocidad": 2,
+      "patron": "vertical",
+      "color": [255, 100, 100],
+      "descripcion": "Se mueve verticalmente r\u00e1pido"
+    }
+  },
+  "shooter": {
+    "shooter_h": {
+      "velocidad": 1,
+      "intervalo_disparo": 60,
+      "velocidad_proyectil": 3,
+      "patron": "horizontal",
+      "tipo_disparo": "vertical",
+      "color": [200, 100, 200],
+      "descripcion": "Se mueve horizontal, dispara arriba y abajo"
+    },
+    "shooter_v": {
+      "velocidad": 1,
+      "intervalo_disparo": 60,
+      "velocidad_proyectil": 3,
+      "patron": "vertical",
+      "tipo_disparo": "horizontal",
+      "color": [200, 100, 200],
+      "descripcion": "Se mueve vertical, dispara izquierda y derecha"
+    },
+    "shooter_h_rapido": {
+      "velocidad": 2,
+      "intervalo_disparo": 30,
+      "velocidad_proyectil": 4,
+      "patron": "horizontal",
+      "tipo_disparo": "vertical",
+      "color": [220, 80, 220],
+      "descripcion": "Shooter horizontal r\u00e1pido"
+    },
+    "shooter_v_lento": {
+      "velocidad": 0.5,
+      "intervalo_disparo": 90,
+      "velocidad_proyectil": 2,
+      "patron": "vertical",
+      "tipo_disparo": "horizontal",
+      "color": [180, 120, 180],
+      "descripcion": "Shooter vertical lento"
+    }
+  },
+  "char_map": {
+    "H": ["melee", "horizontal"],
+    "V": ["melee", "vertical"],
+    "C": ["melee", "circular"],
+    "S": ["shooter", "shooter_h"],
+    "T": ["shooter", "shooter_v"]
+  }
+}

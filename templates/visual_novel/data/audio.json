@@ -1,0 +1,18 @@
+{
+  "bgm_intro": {
+    "asset_id": "bgm_intro",
+    "tipo": "bgm",
+    "nombre": "Música de introducción",
+    "volumen": 0.7,
+    "loop": true,
+    "scene_default": ""
+  },
+  "sfx_click": {
+    "asset_id": "sfx_click",
+    "tipo": "sfx",
+    "nombre": "Click",
+    "volumen": 1.0,
+    "loop": false,
+    "scene_default": ""
+  }
+}

@@ -279,21 +279,28 @@ class MapEditorPanel(BasePanel):
         self._show_grid = not self._show_grid
 
     def _launch_game(self):
-        """Lanza el juego Orm en un proceso separado"""
+        """Lanza el runtime del proyecto actual en un proceso separado"""
         tab = self._current_tab
         if tab and tab.map_id and not tab.map_id.startswith("_new_"):
             self._save_map()
-        game_path = os.path.join(get_current_project().root, "main.py")
-        if not os.path.exists(game_path):
-            print(f"[EDITOR] No se encuentra main.py en {get_current_project().root}")
+        p = get_current_project()
+        if not p:
+            print("[EDITOR] No hay proyecto seleccionado")
+            return
+        runtime = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "orm", "main.py",
+        )
+        if not os.path.exists(runtime):
+            print(f"[EDITOR] No se encuentra el runtime en {runtime}")
             return
         try:
             subprocess.Popen(
-                [sys.executable, "main.py"],
-                cwd=get_current_project().root,
+                [sys.executable, runtime, "--project", p.root],
+                cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                 creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
             )
-            print(f"[EDITOR] Juego lanzado desde {get_current_project().root}")
+            print(f"[EDITOR] Juego lanzado para {p.root}")
         except Exception as e:
             print(f"[EDITOR] Error lanzando juego: {e}")
 

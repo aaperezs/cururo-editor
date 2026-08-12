@@ -1,0 +1,31 @@
+{
+  "demo_recoleccion": {
+    "tipo": "recoleccion",
+    "nombre": "Recolecta las estrellas",
+    "tiempo_limite": 30,
+    "objetivo": 3,
+    "items": [
+      {"x": 200, "y": 150, "radio": 24, "puntos": 1, "color": [255, 220, 50]},
+      {"x": 450, "y": 300, "radio": 24, "puntos": 1, "color": [255, 220, 50]},
+      {"x": 650, "y": 180, "radio": 24, "puntos": 1, "color": [255, 220, 50]}
+    ],
+    "flags_resultado": {"recoleccion_completada": true}
+  },
+  "demo_timing": {
+    "tipo": "timing",
+    "nombre": "Presiona en ritmo",
+    "secuencia": [
+      {"tecla": "SPACE", "tiempo_ms": 2000, "ventana_ms": 500},
+      {"tecla": "UP", "tiempo_ms": 4000, "ventana_ms": 500},
+      {"tecla": "SPACE", "tiempo_ms": 6000, "ventana_ms": 500}
+    ],
+    "flags_resultado": {"timing_completado": true}
+  },
+  "demo_puzzle": {
+    "tipo": "puzzle",
+    "nombre": "Ordena las piezas",
+    "grid": [3, 3],
+    "tile_size": 80,
+    "flags_resultado": {"puzzle_completado": true}
+  }
+}

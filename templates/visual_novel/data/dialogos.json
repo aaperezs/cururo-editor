@@ -1,0 +1,87 @@
+{
+  "runa": {
+    "saludo": {
+      "flat": [
+        "¡Hola! Bienvenido a tu primera novela visual con Cururo.",
+        "Este es un diálogo de ejemplo para que veas cómo funciona el sistema.",
+        "Presiona ESPACIO o ENTER para avanzar entre líneas.",
+        "¡Disfruta creando tu historia!"
+      ],
+      "nodes": {
+        "n1": {
+          "tipo": "dialogo",
+          "texto": "¡Hola! Bienvenido a tu primera novela visual con Cururo.",
+          "next": "n2"
+        },
+        "n2": {
+          "tipo": "dialogo",
+          "texto": "Este es un diálogo de ejemplo para que veas cómo funciona el sistema.",
+          "next": "n3"
+        },
+        "n3": {
+          "tipo": "opcion",
+          "choices": [
+            {"texto": "Continuar la historia", "next": "n4"},
+            {"texto": "Salir del modo VN", "next": "n6"}
+          ]
+        },
+        "n4": {
+          "tipo": "dialogo",
+          "texto": "¡Excelente elección! Hay muchas más escenas por descubrir.",
+          "next": "n5"
+        },
+        "n5": {
+          "tipo": "accion",
+          "tipo_accion": "set_flag",
+          "params": {"flag": "dialogo_completado", "valor": true},
+          "next": null
+        },
+        "n6": {
+          "tipo": "accion",
+          "tipo_accion": "fin_demo",
+          "params": {},
+          "next": null
+        }
+      },
+      "start": "n1"
+    },
+    "presentacion": {
+      "flat": [
+        "Hola de nuevo. Veo que has vuelto.",
+        "Te presento este mundo. Usa las flechas para moverte y E para interactuar."
+      ],
+      "nodes": {
+        "n1": {
+          "tipo": "condicion",
+          "flag": "conoce_runa",
+          "operador": "==",
+          "valor": true,
+          "next": "n3",
+          "next_false": "n2"
+        },
+        "n2": {
+          "tipo": "dialogo",
+          "texto": "Hola, soy Runa. Encantada de conocerte. {flag:nombre_jugador}",
+          "next": "n4"
+        },
+        "n3": {
+          "tipo": "dialogo",
+          "texto": "¡Qué alegría verte de nuevo, {flag:nombre_jugador}!",
+          "next": "n5"
+        },
+        "n4": {
+          "tipo": "accion",
+          "tipo_accion": "set_flag",
+          "params": {"flag": "conoce_runa", "valor": true},
+          "next": "n5"
+        },
+        "n5": {
+          "tipo": "dialogo",
+          "texto": "Te presento este mundo. Usa las flechas para moverte y E para interactuar.",
+          "next": null
+        }
+      },
+      "start": "n1"
+    }
+  }
+}

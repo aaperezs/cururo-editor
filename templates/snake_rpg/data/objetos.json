@@ -1,0 +1,47 @@
+{
+  "tiara_alada": {
+    "nombre": "Tiara Alada",
+    "slot": "cabeza",
+    "descripcion": "Te permite deslizarte sobre hierba alta y hielo sin esfuerzo",
+    "rareza": "rara",
+    "efectos": [
+      { "tipo": "negar_terreno", "terrenos": ["hierba_alta", "hielo"] }
+    ]
+  },
+  "anillo_del_bosque": {
+    "nombre": "Anillo del Bosque",
+    "slot": "cola",
+    "descripcion": "Aumenta la velocidad de movimiento",
+    "rareza": "comun",
+    "efectos": [
+      { "tipo": "velocidad_extra", "valor": 1.15 }
+    ]
+  },
+  "colgante_runico": {
+    "nombre": "Colgante R\u00fanico",
+    "slot": "cuello",
+    "descripcion": "Recupera PP lentamente con el tiempo",
+    "rareza": "rara",
+    "efectos": [
+      { "tipo": "regeneracion_pp", "pp_por_frame": 0.01 }
+    ]
+  },
+  "bota_de_hierro": {
+    "nombre": "Bota de Hierro",
+    "slot": "cola",
+    "descripcion": "No resbalas en superficies heladas",
+    "rareza": "comun",
+    "efectos": [
+      { "tipo": "negar_terreno", "terrenos": ["hielo"] }
+    ]
+  },
+  "cinta_de_la_vida": {
+    "nombre": "Cinta de la Vida",
+    "slot": "cabeza",
+    "descripcion": "Aumenta la longitud m\u00ednima a 5",
+    "rareza": "epica",
+    "efectos": [
+      { "tipo": "longitud_minima_extra", "valor": 2 }
+    ]
+  }
+}

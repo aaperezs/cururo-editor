@@ -1,0 +1,17 @@
+{
+  "personajes": {
+    "runa": {
+      "nombre": "Runa",
+      "color_texto": [255, 200, 200],
+      "retratos": {
+        "normal": "personajes/runa_normal",
+        "feliz": "personajes/runa_feliz",
+        "triste": "personajes/runa_triste",
+        "enojado": "personajes/runa_enojado",
+        "sonrojado": "personajes/runa_sonrojado",
+        "sorpresa": "personajes/runa_sorpresa"
+      }
+    }
+  },
+  "protegidos": []
+}

@@ -1,0 +1,18 @@
+{
+  "bgm_default": {
+    "asset_id": "bgm_default",
+    "tipo": "bgm",
+    "nombre": "Música por defecto",
+    "volumen": 0.7,
+    "loop": true,
+    "scene_default": ""
+  },
+  "sfx_hit": {
+    "asset_id": "sfx_hit",
+    "tipo": "sfx",
+    "nombre": "Golpe",
+    "volumen": 1.0,
+    "loop": false,
+    "scene_default": ""
+  }
+}

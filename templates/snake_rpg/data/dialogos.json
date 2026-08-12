@@ -1,0 +1,14 @@
+{
+  "tronco": {
+    "entrada": [
+      "{tronco_face} Orm, se que llevas gran lamento sobre tu alma...",
+      "{tronco_face} ...pero los dioses me han puesto en tu camino para evitar que cometas un error.",
+      "{tronco_face} Si quieres vencerme deberás juntar poder rúnico {runa},",
+      "{tronco_face} si juntas suficientes  {runa} podrás hacerme daño aun siendo un mortal"
+    ],
+    "salida": [
+      "Amiga, eres una formidable guerrera",
+      "te daré tal fuerza que ni una roca podrá hacerte frente"
+    ]
+  }
+}

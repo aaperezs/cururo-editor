@@ -1,0 +1,114 @@
+{
+  "habilidades": {
+    "base": {
+      "nombre": "Base",
+      "descripcion": "Skin original (sin habilidad)",
+      "pp_max": 0,
+      "color": [
+        0,
+        255,
+        0
+      ],
+      "tecla": "TAB",
+      "efecto": "base",
+      "skin": "base"
+    },
+    "golpe_cabeza": {
+      "nombre": "Golpe de Cabeza",
+      "descripcion": "Rompe rocas y aturde enemigos",
+      "pp_max": 5,
+      "color": [
+        255,
+        165,
+        0
+      ],
+      "tecla": "Q",
+      "efecto": "golpe",
+      "skin": "golpe",
+      "accion": "romper_rocas"
+    },
+    "manto_oscuridad": {
+      "nombre": "Manto de Oscuridad",
+      "descripcion": "Vuelve intangible 2 segundos",
+      "pp_max": 3,
+      "color": [
+        128,
+        0,
+        128
+      ],
+      "tecla": "W",
+      "efecto": "manto",
+      "skin": "manto",
+      "accion": "atravesar"
+    },
+    "cola_latigo": {
+      "nombre": "Cola Látigo",
+      "descripcion": "Gira 360° cortando vegetación",
+      "pp_max": 4,
+      "color": [
+        230,
+        120,
+        50
+      ],
+      "tecla": "E",
+      "efecto": "latigo",
+      "skin": "latigo",
+      "accion": "cortar"
+    }
+  },
+  "skins": {
+    "base": {
+      "cabeza": [
+        100,
+        255,
+        100
+      ],
+      "cuerpo": [
+        0,
+        200,
+        0
+      ]
+    },
+    "golpe": {
+      "cabeza": [
+        210,
+        180,
+        140
+      ],
+      "cuerpo": [
+        139,
+        90,
+        43
+      ]
+    },
+    "manto": {
+      "cabeza": [
+        180,
+        180,
+        190
+      ],
+      "cuerpo": [
+        80,
+        80,
+        90
+      ]
+    },
+    "latigo": {
+      "cabeza": [
+        230,
+        120,
+        50
+      ],
+      "cuerpo": [
+        200,
+        60,
+        30
+      ]
+    }
+  },
+  "iniciales": [
+    "golpe_cabeza",
+    "manto_oscuridad",
+    "cola_latigo"
+  ]
+}

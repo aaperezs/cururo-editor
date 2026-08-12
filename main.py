@@ -24,6 +24,11 @@ from editor.project import set_current_project, sys_path_setup
 sys_path_setup(project_root)
 set_current_project(project_root)
 
+if not os.path.isdir(os.path.join(project_root, "utils")):
+    _orm_root = os.path.join(_src_root, "orm")
+    if os.path.isdir(os.path.join(_orm_root, "utils")) and _orm_root not in sys.path:
+        sys.path.insert(0, _orm_root)
+
 import pygame
 from editor.translation import I18n
 from editor.widgets.menu_manager import MenuManager
@@ -48,7 +53,17 @@ from editor.custom_behaviors import CustomBehaviorsPanel
 from editor.screens_panel import ScreensPanel
 from editor import behaviors as editor_behaviors
 from editor.dialog_data import _load_dialogos
-from editor.dialog_tab import DialogTab
+from editor.dialog_tree_panel import DialogTreePanel
+from editor.character_data import _load_characters
+from editor.character_panel import CharacterPanel
+from editor.asset_data import _load_assets
+from editor.asset_panel import AssetPanel
+from editor.scene_data import _load_scenes
+from editor.scene_panel import ScenePanel
+from editor.minigame_data import _load_minigames
+from editor.minigame_panel import MiniGamePanel
+from editor.audio_data import _load_audio
+from editor.audio_panel import AudioPanel
 
 
 PANEL_CLASSES = {
@@ -63,10 +78,85 @@ PANEL_CLASSES = {
     "scripts": ScriptPanel,
     "behaviors": CustomBehaviorsPanel,
     "screens": ScreensPanel,
-    "dialogos": DialogTab,
+    "dialogos": DialogTreePanel,
+    "characters": CharacterPanel,
+    "assets": AssetPanel,
+    "scenes": ScenePanel,
+    "minigames": MiniGamePanel,
+    "audio": AudioPanel,
 }
 
 MENUBAR_H = 26
+
+
+def _work_area():
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        rect = wintypes.RECT()
+        if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):
+            return rect.left, rect.top, rect.right, rect.bottom
+    except Exception:
+        pass
+    return None
+
+
+def _clamp_window_pos(x, y, w, h):
+    if x is None or y is None:
+        return x, y
+    area = _work_area()
+    if not area:
+        return x, y
+    left, top, right, bottom = area
+    area_w, area_h = right - left, bottom - top
+    if w <= area_w:
+        x = min(max(x, left), right - w)
+    else:
+        x = left
+    if h <= area_h:
+        y = min(max(y, top), bottom - h)
+    else:
+        y = top
+    return x, y
+
+
+def _is_maximized():
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        info = pygame.display.get_wm_info()
+        hwnd = info.get("window")
+        if not hwnd:
+            return None
+
+        class _WINDOWPLACEMENT(ctypes.Structure):
+            _fields_ = [
+                ("length", wintypes.UINT),
+                ("flags", wintypes.UINT),
+                ("showCmd", wintypes.UINT),
+                ("ptMinPosition", wintypes.POINT),
+                ("ptMaxPosition", wintypes.POINT),
+                ("rcNormalPosition", wintypes.RECT),
+            ]
+
+        placement = _WINDOWPLACEMENT()
+        placement.length = ctypes.sizeof(_WINDOWPLACEMENT)
+        if not ctypes.windll.user32.GetWindowPlacement(hwnd, ctypes.byref(placement)):
+            return None
+        return placement.showCmd == 3
+    except Exception:
+        return None
+
+
+def _restore_fallback_maximize(x, y, w, h):
+    try:
+        px, py = _clamp_window_pos(x, y, w, h)
+        pygame.display.set_mode((w, h), pygame.RESIZABLE)
+        pygame.display.set_window_position((px, py))
+    except pygame.error:
+        pass
 
 
 class EditorApp:
@@ -78,6 +168,11 @@ class EditorApp:
         _load_bosses()
         _load_animations()
         _load_dialogos()
+        _load_characters()
+        _load_assets()
+        _load_scenes()
+        _load_minigames()
+        _load_audio()
         editor_behaviors._load()
         self.ancho = 1100
         self.alto = 700
@@ -103,27 +198,92 @@ class EditorApp:
         from editor.project import create_project, list_templates, set_current_project
         from editor.elements import _load_elements
         from editor.behaviors import _load as _load_behaviors
+        from editor.categories import get_all_categories
 
+        all_categories = get_all_categories()
         templates = list_templates()
-        if not templates:
+        if not all_categories or not templates:
             return
 
+        PLATFORMS = [("desktop", "Escritorio"), ("mobile", "Movil")]
+        QUALITIES = [("low", "Baja"), ("medium", "Media"), ("high", "Alta")]
+
         name = ""
-        template_id = templates[0]["id"]
+        title = ""
+        sel_cat_idx = 0
+        sel_tpl_idx = 0
+        sel_plat_idx = 0
+        sel_qual_idx = 1
         error = ""
         done = False
         result_path = None
+        focus = "name"
+
+        def _templates_for_cat():
+            cat_id = all_categories[sel_cat_idx]["id"]
+            return [t for t in templates if t.get("category") == cat_id]
 
         font = self.i18n.fuente(16)
         font_b = self.i18n.fuente(16, bold=True)
         font_small = self.i18n.fuente(12)
 
-        input_rect = pygame.Rect(0, 0, 300, 30)
-        create_btn = pygame.Rect(0, 0, 100, 30)
-        cancel_btn = pygame.Rect(0, 0, 100, 30)
-        dialog_w, dialog_h = 400, 250
+        dialog_w, dialog_h = 450, 560
         dx = (self.ancho - dialog_w) // 2
         dy = (self.alto - dialog_h) // 2
+        top = dy
+
+        cat_start = top + 146
+        cat_h = 30
+        tpl_start = cat_start + len(all_categories) * cat_h + 16
+        tpl_h = 24
+        opt_h = 22
+        plat_start = tpl_start + 24 + 12
+        qual_start = plat_start + len(PLATFORMS) * opt_h + 12
+        title_label = qual_start + len(QUALITIES) * opt_h + 14
+        title_input_y = title_label + 22
+
+        cx_center = self.ancho // 2
+        create_btn = pygame.Rect(0, 0, 110, 30)
+        create_btn.center = (cx_center - 60, dy + dialog_h - 50)
+        cancel_btn = pygame.Rect(0, 0, 110, 30)
+        cancel_btn.center = (cx_center + 60, dy + dialog_h - 50)
+
+        _order = ["name", "cat", "template", "platform", "quality", "title"]
+
+        def _next_focus():
+            return _order[(_order.index(focus) + 1) % len(_order)]
+
+        def _prev_focus():
+            return _order[(_order.index(focus) - 1) % len(_order)]
+
+        def _do_create():
+            nonlocal result_path, done, error
+            if not name.strip():
+                error = "El nombre no puede estar vacio"
+                return
+            available = _templates_for_cat()
+            if not available:
+                error = "Sin plantillas para esta categoria"
+                return
+            tpl = available[sel_tpl_idx]
+            safe = name.strip().lower().replace(" ", "_").replace("-", "_")
+            search_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            path = os.path.join(search_dir, safe)
+            n = 1
+            while os.path.exists(path):
+                path = os.path.join(search_dir, f"{safe}_{n}")
+                n += 1
+            r = create_project(
+                tpl["id"], name.strip(), path,
+                platform=PLATFORMS[sel_plat_idx][0],
+                quality=QUALITIES[sel_qual_idx][0],
+                window_title=title.strip() or None,
+            )
+            if r:
+                result_path = r
+                done = True
+            else:
+                error = "Error al crear proyecto"
 
         while not done:
             for event in pygame.event.get([pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN, pygame.QUIT]):
@@ -131,53 +291,92 @@ class EditorApp:
                     return
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        done = True
-                        result_path = None
+                        if focus == "name":
+                            done = True
+                            result_path = None
+                        else:
+                            focus = _prev_focus()
                     elif event.key == pygame.K_RETURN:
-                        if name.strip():
-                            safe = name.strip().lower().replace(" ", "_").replace("-", "_")
-                            search_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                            path = os.path.join(search_dir, safe)
-                            n = 1
-                            while os.path.exists(path):
-                                path = os.path.join(search_dir, f"{safe}_{n}")
-                                n += 1
-                            r = create_project(template_id, name.strip(), path)
-                            if r:
-                                result_path = r
-                                done = True
-                            else:
-                                error = "Error al crear proyecto"
+                        if focus == "name":
+                            if name.strip():
+                                focus = "cat"
+                        elif focus == "cat":
+                            focus = "template"
+                        elif focus == "template":
+                            focus = "platform"
+                        elif focus == "platform":
+                            focus = "quality"
+                        elif focus == "quality":
+                            focus = "title"
+                        elif focus == "title":
+                            _do_create()
                     elif event.key == pygame.K_TAB:
-                        idx = next((i for i, t in enumerate(templates)
-                                    if t["id"] == template_id), 0)
-                        template_id = templates[(idx + 1) % len(templates)]["id"]
+                        focus = _next_focus()
+                    elif event.key == pygame.K_UP:
+                        if focus == "cat":
+                            sel_cat_idx = max(0, sel_cat_idx - 1)
+                            sel_tpl_idx = 0
+                        elif focus == "template":
+                            sel_tpl_idx = max(0, sel_tpl_idx - 1)
+                        elif focus == "platform":
+                            sel_plat_idx = max(0, sel_plat_idx - 1)
+                        elif focus == "quality":
+                            sel_qual_idx = max(0, sel_qual_idx - 1)
+                    elif event.key == pygame.K_DOWN:
+                        if focus == "cat":
+                            sel_cat_idx = min(len(all_categories) - 1, sel_cat_idx + 1)
+                            sel_tpl_idx = 0
+                        elif focus == "template":
+                            available = _templates_for_cat()
+                            sel_tpl_idx = min(len(available) - 1, sel_tpl_idx + 1)
+                        elif focus == "platform":
+                            sel_plat_idx = min(len(PLATFORMS) - 1, sel_plat_idx + 1)
+                        elif focus == "quality":
+                            sel_qual_idx = min(len(QUALITIES) - 1, sel_qual_idx + 1)
                     elif event.key == pygame.K_BACKSPACE:
-                        name = name[:-1]
-                    elif event.unicode and len(name) < 40:
-                        name += event.unicode
+                        if focus == "name":
+                            name = name[:-1]
+                        elif focus == "title":
+                            title = title[:-1]
+                    elif event.unicode:
+                        if focus == "name" and len(name) < 40:
+                            name += event.unicode
+                        elif focus == "title" and len(title) < 60:
+                            title += event.unicode
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = event.pos
-                    cx = self.ancho // 2
-                    cy = self.alto // 2
-                    input_rect.center = (cx, cy - 30)
-                    create_btn.center = (cx - 60, cy + 40)
-                    cancel_btn.center = (cx + 60, cy + 40)
+                    input_rect = pygame.Rect(0, 0, 300, 30)
+                    input_rect.center = (cx_center, top + 100)
+                    if input_rect.collidepoint(mx, my):
+                        focus = "name"
+                    for i, cat in enumerate(all_categories):
+                        ry = cat_start + i * cat_h
+                        if dx + 30 <= mx <= dx + dialog_w - 30 and ry <= my <= ry + cat_h - 2:
+                            sel_cat_idx = i
+                            sel_tpl_idx = 0
+                            focus = "cat"
+                    available = _templates_for_cat()
+                    for i, tpl in enumerate(available):
+                        ry = tpl_start + i * tpl_h
+                        if dx + 30 <= mx <= dx + dialog_w - 30 and ry <= my <= ry + tpl_h - 2:
+                            sel_tpl_idx = i
+                            focus = "template"
+                    for i, plat in enumerate(PLATFORMS):
+                        ry = plat_start + i * opt_h
+                        if dx + 30 <= mx <= dx + dialog_w - 30 and ry <= my <= ry + opt_h - 2:
+                            sel_plat_idx = i
+                            focus = "platform"
+                    for i, qual in enumerate(QUALITIES):
+                        ry = qual_start + i * opt_h
+                        if dx + 30 <= mx <= dx + dialog_w - 30 and ry <= my <= ry + opt_h - 2:
+                            sel_qual_idx = i
+                            focus = "quality"
+                    t_input = pygame.Rect(dx + 40, title_input_y, dialog_w - 80, 26)
+                    if t_input.collidepoint(mx, my):
+                        focus = "title"
                     if create_btn.collidepoint(mx, my) and name.strip():
-                        safe = name.strip().lower().replace(" ", "_").replace("-", "_")
-                        search_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                        path = os.path.join(search_dir, safe)
-                        n = 1
-                        while os.path.exists(path):
-                            path = os.path.join(search_dir, f"{safe}_{n}")
-                            n += 1
-                        r = create_project(template_id, name.strip(), path)
-                        if r:
-                            result_path = r
-                            done = True
-                        else:
-                            error = "Error al crear proyecto"
-                    elif cancel_btn.collidepoint(mx, my):
+                        _do_create()
+                    if cancel_btn.collidepoint(mx, my):
                         done = True
                         result_path = None
 
@@ -185,32 +384,102 @@ class EditorApp:
             overlay.fill((0, 0, 0, 180))
             self.screen.blit(overlay, (0, 0))
 
-            cx = self.ancho // 2
-            cy = self.alto // 2
-            input_rect.center = (cx, cy - 30)
-            create_btn.center = (cx - 60, cy + 40)
-            cancel_btn.center = (cx + 60, cy + 40)
-
             pygame.draw.rect(self.screen, (40, 44, 52), (dx, dy, dialog_w, dialog_h))
             pygame.draw.rect(self.screen, (60, 65, 75), (dx, dy, dialog_w, dialog_h), 2)
 
-            title = font_b.render("Nuevo Proyecto", True, (200, 210, 220))
-            self.screen.blit(title, (cx - title.get_width() // 2, dy + 20))
+            dialog_title = font_b.render("Nuevo Proyecto", True, (200, 210, 220))
+            self.screen.blit(dialog_title, (cx_center - dialog_title.get_width() // 2, dy + 16))
+
+            if error:
+                err = font.render(error, True, (220, 80, 80))
+                self.screen.blit(err, (cx_center - err.get_width() // 2, dy + 44))
 
             lbl = font.render("Nombre:", True, (180, 190, 200))
-            self.screen.blit(lbl, (dx + 30, cy - 60))
+            self.screen.blit(lbl, (dx + 30, top + 64))
 
+            input_rect = pygame.Rect(0, 0, 300, 30)
+            input_rect.center = (cx_center, top + 100)
+            border_c = (70, 130, 200) if focus == "name" else (60, 65, 75)
             pygame.draw.rect(self.screen, (50, 55, 65), input_rect)
-            pygame.draw.rect(self.screen, (70, 130, 200), input_rect, 2)
-            display = name + ("|" if pygame.time.get_ticks() % 600 < 300 else " ")
+            pygame.draw.rect(self.screen, border_c, input_rect, 2)
+            display = name + ("|" if focus == "name" and pygame.time.get_ticks() % 600 < 300 else " ")
             txt = font.render(display, True, (220, 220, 220))
             self.screen.blit(txt, (input_rect.x + 6, input_rect.y + 4))
 
-            tmpl_label = font_small.render(
-                "Plantilla: " + next((t["name"] for t in templates
-                                      if t["id"] == template_id), ""),
-                True, (150, 170, 200))
-            self.screen.blit(tmpl_label, (dx + 30, cy + 2))
+            cat_lbl = font_small.render("Categoria:", True, (150, 170, 200))
+            self.screen.blit(cat_lbl, (dx + 30, cat_start - 18))
+
+            for i, cat in enumerate(all_categories):
+                ry = cat_start + i * cat_h
+                sel = i == sel_cat_idx
+                fcs = focus == "cat" and sel
+                bg = (55, 70, 90) if fcs else (42, 55, 70)
+                pygame.draw.rect(self.screen, bg, (dx + 30, ry, dialog_w - 60, cat_h - 2))
+                if fcs:
+                    pygame.draw.rect(self.screen, (70, 160, 220), (dx + 30, ry, 3, cat_h - 2))
+                elif sel:
+                    pygame.draw.rect(self.screen, (50, 100, 140), (dx + 30, ry, 3, cat_h - 2))
+                cname = font_small.render(cat["name"], True, (200, 210, 220))
+                self.screen.blit(cname, (dx + 40, ry + 4))
+
+            tpl_lbl = font_small.render("Plantilla:", True, (150, 170, 200))
+            self.screen.blit(tpl_lbl, (dx + 30, tpl_start - 18))
+
+            available = _templates_for_cat()
+            if not available:
+                no_tpl = font_small.render("(sin plantillas)", True, (120, 130, 140))
+                self.screen.blit(no_tpl, (dx + 40, tpl_start))
+            else:
+                for i, tpl in enumerate(available):
+                    ry = tpl_start + i * tpl_h
+                    sel = i == sel_tpl_idx
+                    fcs = focus == "template" and sel
+                    bg = (55, 60, 72) if fcs else (45, 48, 55)
+                    pygame.draw.rect(self.screen, bg, (dx + 30, ry, dialog_w - 60, tpl_h - 2))
+                    if fcs:
+                        pygame.draw.rect(self.screen, (70, 130, 200), (dx + 30, ry, 3, tpl_h - 2))
+                    tname = font_small.render(tpl["name"], True, (180, 200, 230))
+                    self.screen.blit(tname, (dx + 40, ry + 2))
+
+            plat_lbl = font_small.render("Plataforma:", True, (150, 170, 200))
+            self.screen.blit(plat_lbl, (dx + 30, plat_start - 18))
+            for i, plat in enumerate(PLATFORMS):
+                ry = plat_start + i * opt_h
+                sel = i == sel_plat_idx
+                fcs = focus == "platform" and sel
+                bg = (55, 70, 90) if fcs else (42, 55, 70)
+                pygame.draw.rect(self.screen, bg, (dx + 30, ry, dialog_w - 60, opt_h - 2))
+                if fcs:
+                    pygame.draw.rect(self.screen, (70, 160, 220), (dx + 30, ry, 3, opt_h - 2))
+                elif sel:
+                    pygame.draw.rect(self.screen, (50, 100, 140), (dx + 30, ry, 3, opt_h - 2))
+                ptxt = font_small.render(plat[1], True, (200, 210, 220))
+                self.screen.blit(ptxt, (dx + 40, ry + 2))
+
+            qual_lbl = font_small.render("Calidad grafica:", True, (150, 170, 200))
+            self.screen.blit(qual_lbl, (dx + 30, qual_start - 18))
+            for i, qual in enumerate(QUALITIES):
+                ry = qual_start + i * opt_h
+                sel = i == sel_qual_idx
+                fcs = focus == "quality" and sel
+                bg = (55, 70, 90) if fcs else (42, 55, 70)
+                pygame.draw.rect(self.screen, bg, (dx + 30, ry, dialog_w - 60, opt_h - 2))
+                if fcs:
+                    pygame.draw.rect(self.screen, (70, 160, 220), (dx + 30, ry, 3, opt_h - 2))
+                elif sel:
+                    pygame.draw.rect(self.screen, (50, 100, 140), (dx + 30, ry, 3, opt_h - 2))
+                qtxt = font_small.render(qual[1], True, (200, 210, 220))
+                self.screen.blit(qtxt, (dx + 40, ry + 2))
+
+            title_lbl = font_small.render("Titulo de ventana (opcional):", True, (150, 170, 200))
+            self.screen.blit(title_lbl, (dx + 30, title_label))
+            t_input = pygame.Rect(dx + 40, title_input_y, dialog_w - 80, 26)
+            t_color = (70, 130, 200) if focus == "title" else (60, 65, 75)
+            pygame.draw.rect(self.screen, (50, 55, 65), t_input)
+            pygame.draw.rect(self.screen, t_color, t_input, 2)
+            t_disp = title + ("|" if focus == "title" and pygame.time.get_ticks() % 600 < 300 else " ")
+            t_txt = font_small.render(t_disp, True, (220, 220, 220))
+            self.screen.blit(t_txt, (t_input.x + 6, t_input.y + 4))
 
             pygame.draw.rect(self.screen, (50, 100, 50), create_btn)
             pygame.draw.rect(self.screen, (70, 140, 70), create_btn, 2)
@@ -223,10 +492,6 @@ class EditorApp:
             et = font.render("Cancelar", True, (180, 180, 185))
             self.screen.blit(et, (cancel_btn.centerx - et.get_width() // 2,
                                   cancel_btn.centery - et.get_height() // 2))
-
-            if error:
-                err = font.render(error, True, (220, 80, 80))
-                self.screen.blit(err, (cx - err.get_width() // 2, dy + dialog_h - 30))
 
             pygame.display.flip()
             self.clock.tick(30)
@@ -369,12 +634,21 @@ exe = EXE(
 
     def run_game(self):
         import subprocess, sys, os
+        from editor.project import get_current_project
+        p = get_current_project()
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         main_py = os.path.join(root, "orm", "main.py")
-        if os.path.exists(main_py):
-            subprocess.Popen([sys.executable, main_py, "--test"], cwd=root)
-        else:
+        if not os.path.exists(main_py):
             print(f"[Menu] No se encuentra {main_py}")
+            return
+        if p is None:
+            print("[Menu] No hay proyecto seleccionado")
+            return
+        subprocess.Popen(
+            [sys.executable, main_py, "--project", p.root],
+            cwd=root,
+            creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
+        )
 
     def _undo_redo_event(self, key):
         panel = self.menu.get_active_panel()
@@ -437,6 +711,7 @@ exe = EXE(
 
     def _crear_menu_bar(self):
         mb = MenuBar(0, 0, self.ancho)
+        available = self._get_available_panels()
 
         archivo = MenuSection("Archivo", [
             MenuItem("Nuevo Proyecto", action=self.nuevo_proyecto, shortcut="Ctrl+N"),
@@ -455,29 +730,42 @@ exe = EXE(
         ])
         mb.add_section(editar.label, editar.items)
 
-        arte = MenuSection("Arte", [
-            MenuItem("Sprites", action=lambda: self._open_panel("sprites"), shortcut="Ctrl+1"),
-            MenuItem("Mapas", action=lambda: self._open_panel("maps"), shortcut="Ctrl+2"),
-            MenuItem("Animaciones", action=lambda: self._open_panel("animations"), shortcut="Ctrl+3"),
-            MenuItem("Scripts", action=lambda: self._open_panel("scripts"), separator_before=True),
-        ])
-        mb.add_section(arte.label, arte.items)
+        arte_items = []
+        if "sprites" in available:
+            arte_items.append(MenuItem("Sprites", action=lambda: self._open_panel("sprites"), shortcut="Ctrl+1"))
+        if "maps" in available:
+            arte_items.append(MenuItem("Mapas", action=lambda: self._open_panel("maps"), shortcut="Ctrl+2"))
+        if "animations" in available:
+            arte_items.append(MenuItem("Animaciones", action=lambda: self._open_panel("animations"), shortcut="Ctrl+3"))
+        if "scripts" in available:
+            arte_items.append(MenuItem("Scripts", action=lambda: self._open_panel("scripts"), separator_before=True))
+        if "screens" in available:
+            arte_items.append(MenuItem("Pantallas", action=lambda: self._open_panel("screens"), separator_before=True))
+        if arte_items:
+            arte = MenuSection("Arte", arte_items)
+            mb.add_section(arte.label, arte.items)
 
-        pantallas = MenuSection("Pantallas", [
-            MenuItem("Pantallas", action=lambda: self._open_panel("screens")),
-        ])
-        mb.add_section(pantallas.label, pantallas.items)
-
-        herramientas = MenuSection("Herramientas", [
-            MenuItem("Elementos", action=lambda: self._open_panel("elements")),
-            MenuItem("Comportamientos", action=lambda: self._open_panel("behaviors")),
-            MenuItem("Habilidades", action=lambda: self._open_panel("abilities")),
-            MenuItem("Items", action=lambda: self._open_panel("items")),
-            MenuItem("Bosses", action=lambda: self._open_panel("bosses")),
-            MenuItem("Eventos", action=lambda: self._open_panel("events")),
-            MenuItem("Dialogos", action=lambda: self._open_panel("dialogos")),
-        ])
-        mb.add_section(herramientas.label, herramientas.items)
+        herramientas_items = []
+        panel_labels = {
+            "elements": "Elementos",
+            "behaviors": "Comportamientos",
+            "abilities": "Habilidades",
+            "items": "Items",
+            "bosses": "Bosses",
+            "events": "Eventos",
+            "dialogos": "Dialogos",
+            "scenes": "Escenas",
+            "minigames": "Minijuegos",
+            "audio": "Audio",
+        }
+        for pid, label in panel_labels.items():
+            if pid in available:
+                herramientas_items.append(
+                    MenuItem(label, action=lambda pid=pid: self._open_panel(pid))
+                )
+        if herramientas_items:
+            herramientas = MenuSection("Herramientas", herramientas_items)
+            mb.add_section(herramientas.label, herramientas.items)
 
         ejecutar = MenuSection("Ejecutar", [
             MenuItem("Iniciar juego", action=self.run_game, shortcut="Ctrl+R"),
@@ -491,13 +779,24 @@ exe = EXE(
 
         return mb
 
+    def _get_available_panels(self):
+        from editor.project import get_current_project
+        proj = get_current_project()
+        if proj:
+            return set(proj.get_available_panels())
+        return set(PANEL_CLASSES.keys())
+
     def _crear_menu_manager(self):
         m = MenuManager(0, MENUBAR_H, self.ancho, self.alto - MENUBAR_H)
+        available = self._get_available_panels()
         for tab_id, cls in PANEL_CLASSES.items():
-            m.register_tab(tab_id, self.i18n.t(f"tab.{tab_id}"), cls, self.i18n)
+            if tab_id in available:
+                m.register_tab(tab_id, self.i18n.t(f"tab.{tab_id}"), cls, self.i18n)
         return m
 
     def _rebuild_ui(self):
+        from editor import behaviors as editor_behaviors
+        editor_behaviors._load()
         active_id = self.menu.get_active_id()
         self.menu = self._crear_menu_manager()
         if active_id:
@@ -513,14 +812,27 @@ exe = EXE(
     # ── Workspace ─────────────────────────────────────────
 
     def save_workspace(self):
+        win = {"w": self.ancho, "h": self.alto}
+        try:
+            if pygame.display.get_init():
+                x, y = pygame.display.get_window_position()
+                if x > -10000 or y > -10000:
+                    win["x"], win["y"] = x, y
+        except pygame.error:
+            pass
+        max_info = _is_maximized()
+        if max_info is not None:
+            win["maximized"] = max_info
         data = {
             "active_panel": self.menu.get_active_id(),
             "language": self.i18n.lang,
-            "window": {"w": self.ancho, "h": self.alto},
+            "window": win,
         }
-        maps_panel = self.menu._panel_instances.get("maps")
-        if maps_panel and hasattr(maps_panel, "get_workspace_data"):
-            data["maps"] = maps_panel.get_workspace_data()
+        available = self._get_available_panels()
+        if "maps" in available:
+            maps_panel = self.menu._panel_instances.get("maps")
+            if maps_panel and hasattr(maps_panel, "get_workspace_data"):
+                data["maps"] = maps_panel.get_workspace_data()
         workspace.save_workspace(data)
 
     def restore_workspace(self):
@@ -536,13 +848,31 @@ exe = EXE(
             self.alto = win["h"]
             self.screen = pygame.display.set_mode((self.ancho, self.alto), pygame.RESIZABLE)
             self._resize(self.ancho, self.alto)
+            x = win.get("x")
+            y = win.get("y")
+            if win.get("maximized"):
+                try:
+                    import pygame._sdl2 as _sdl2
+                    _sdl2.Window.from_display_module().maximize()
+                except Exception:
+                    _restore_fallback_maximize(x, y, self.ancho, self.alto)
+            elif x is not None and y is not None:
+                try:
+                    px, py = _clamp_window_pos(x, y, self.ancho, self.alto)
+                    pygame.display.set_window_position((px, py))
+                except pygame.error:
+                    pass
         panel_id = data.get("active_panel", "maps")
+        available = self._get_available_panels()
+        if panel_id not in available:
+            panel_id = next(iter(available), "maps")
         self.menu.set_active_by_id(panel_id)
         self.menu.get_active_panel()
-        maps_panel = self.menu._get_or_create_panel("maps")
-        maps_data = data.get("maps")
-        if maps_data and maps_panel and hasattr(maps_panel, "restore_workspace"):
-            maps_panel.restore_workspace(maps_data)
+        if "maps" in available:
+            maps_panel = self.menu._get_or_create_panel("maps")
+            maps_data = data.get("maps")
+            if maps_data and maps_panel and hasattr(maps_panel, "restore_workspace"):
+                maps_panel.restore_workspace(maps_data)
 
     # ── Selector de idioma ────────────────────────────────
 

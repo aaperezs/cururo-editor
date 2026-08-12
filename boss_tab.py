@@ -1,14 +1,18 @@
-import pygame
 import copy
-from editor.translation import I18n
+import os
+
+import pygame
+
+from editor.boss_data import create_boss, delete_boss, get_all_bosses, get_boss, set_boss
+from editor.boss_fight_types import BOSS_FIGHT_TYPES, get_default_phase
 from editor.panels.base_panel import BasePanel
+from editor.project import get_current_project
+from editor.translation import I18n
 from editor.widgets.button import Button
 from editor.widgets.label import Label
 from editor.widgets.panel import Panel
+from editor.widgets.scroll_container import ScrollContainer
 from editor.widgets.text_input import TextInput
-from editor.boss_fight_types import BOSS_FIGHT_TYPES, get_default_phase, DEFAULT_PHASE_PARAMS, DEFAULT_VISUAL
-from editor.boss_data import get_all_bosses, get_boss, set_boss, delete_boss, create_boss
-
 
 PADDING = 6
 ROW_H = 28
@@ -106,26 +110,143 @@ class BossTab(BasePanel):
         sep.parent = ep; ep.children.append(sep)
         y += 8
 
+        self._build_sprite_section(ep, y)
+        self._build_phases_section(ep)
+
+    def _build_phases_section(self, ep):
+        y = getattr(self, "_phases_title_y", 200)
         self._phases_title = Label(PADDING, y, 200, 18, self.i18n.t("boss.phases"), font_size=12, bold=True, color=(200, 210, 220))
-        self._phases_title.parent = ep; ep.children.append(self._phases_title)
+        self._phases_title.parent = ep
+        ep.children.append(self._phases_title)
 
         self._add_phase_btn = Button(ep.rect.w - 120, y, 110, 18, "+ " + self.i18n.t("boss.add_phase"))
-        self._add_phase_btn.parent = ep; ep.children.append(self._add_phase_btn)
+        self._add_phase_btn.parent = ep
+        ep.children.append(self._add_phase_btn)
         self._add_phase_btn.callback = self._on_add_phase
         y += 24
 
         self._phase_widgets = []
-        self._phase_y = y
+        self._phases_scroll = ScrollContainer(0, y, ep.rect.w,
+                                              max(1, ep.rect.h - y))
+        self._phases_scroll.parent = ep
+        ep.children.append(self._phases_scroll)
         self._rebuild_phase_editor()
+
+    def _build_sprite_section(self, ep, y):
+        lbl = Label(PADDING, y, 80, 22, self.i18n.t("boss.sprite") + ":", font_size=12, color=(180, 185, 195))
+        lbl.parent = ep
+        ep.children.append(lbl)
+        self._sprite_selector = _SimpleDropdown(90, y, 200, 22, self._get_sprite_options())
+        self._sprite_selector.parent = ep
+        ep.children.append(self._sprite_selector)
+        self._sprite_selector._on_select = self._on_sprite_changed
+        y += 28
+
+        lbl = Label(PADDING, y, 80, 22, self.i18n.t("boss.sprite_rows") + ":", font_size=11, color=(180, 185, 195))
+        lbl.parent = ep
+        ep.children.append(lbl)
+        self._sprite_rows_input = TextInput(90, y, 40, 22, default="1", max_chars=3, numeric_only=True)
+        self._sprite_rows_input.parent = ep
+        ep.children.append(self._sprite_rows_input)
+
+        lbl = Label(150, y, 60, 22, self.i18n.t("boss.sprite_cols") + ":", font_size=11, color=(180, 185, 195))
+        lbl.parent = ep
+        ep.children.append(lbl)
+        self._sprite_cols_input = TextInput(205, y, 40, 22, default="1", max_chars=3, numeric_only=True)
+        self._sprite_cols_input.parent = ep
+        ep.children.append(self._sprite_cols_input)
+
+        lbl = Label(265, y, 110, 22, self.i18n.t("boss.sprite_cell") + ":", font_size=11, color=(180, 185, 195))
+        lbl.parent = ep
+        ep.children.append(lbl)
+        self._sprite_fw_input = TextInput(370, y, 40, 22, default="60", max_chars=4, numeric_only=True)
+        self._sprite_fw_input.parent = ep
+        ep.children.append(self._sprite_fw_input)
+
+        lbl = Label(420, y, 8, 22, "x", font_size=11, color=(180, 185, 195))
+        lbl.parent = ep
+        ep.children.append(lbl)
+        self._sprite_fh_input = TextInput(430, y, 40, 22, default="60", max_chars=4, numeric_only=True)
+        self._sprite_fh_input.parent = ep
+        ep.children.append(self._sprite_fh_input)
+
+        lbl = Label(500, y, 80, 22, self.i18n.t("boss.sprite_interval") + ":", font_size=11, color=(180, 185, 195))
+        lbl.parent = ep
+        ep.children.append(lbl)
+        self._sprite_interval_input = TextInput(585, y, 45, 22, default="12", max_chars=4, numeric_only=True)
+        self._sprite_interval_input.parent = ep
+        ep.children.append(self._sprite_interval_input)
+        y += 28
+
+        self._sprite_preview = _SheetPreview(90, y, ep.rect.w - PADDING * 2 - 90, 92)
+        self._sprite_preview.parent = ep
+        self._sprite_preview.host = self
+        ep.children.append(self._sprite_preview)
+        y += 100
+
+        self._phases_title_y = y
+
+    def _get_sprite_options(self):
+        options = [("", "--")]
+        p = get_current_project()
+        if not p:
+            return options
+        assets_dir_path = p.assets_path()
+        if not os.path.isdir(assets_dir_path):
+            return options
+        for fname in sorted(os.listdir(assets_dir_path)):
+            if not fname.lower().endswith(".png"):
+                continue
+            stem = os.path.splitext(fname)[0]
+            if not options or options[-1][0] != stem:
+                options.append((stem, stem))
+        return options
+
+    def _on_sprite_changed(self, _val=None):
+        pass
+
+    def _sprite_grid(self):
+        try:
+            return (int(self._sprite_rows_input.text or "1"),
+                    int(self._sprite_cols_input.text or "1"))
+        except ValueError:
+            return (1, 1)
+
+    def _load_sheet_frames(self):
+        name = self._sprite_selector.get_selected()
+        if not name:
+            return None
+        rows, cols = self._sprite_grid()
+        try:
+            fw = int(self._sprite_fw_input.text or "0")
+            fh = int(self._sprite_fh_input.text or "0")
+        except ValueError:
+            return None
+        if fw <= 0 or fh <= 0:
+            return None
+        p = get_current_project()
+        path = p.assets_path(name + ".png") if p else None
+        if not path or not os.path.exists(path):
+            return None
+        try:
+            hoja = pygame.image.load(path).convert_alpha()
+        except pygame.error:
+            return None
+        w, h = hoja.get_size()
+        if fw * cols > w or fh * rows > h:
+            return None
+        frames = []
+        for r in range(rows):
+            for c in range(cols):
+                frames.append(hoja.subsurface((c * fw, r * fh, fw, fh)).copy())
+        return frames
 
     def _get_ft_options(self):
         return [(ftid, ftdata["label"]) for ftid, ftdata in BOSS_FIGHT_TYPES.items()]
 
     def _rebuild_phase_editor(self):
-        ep = self._editor_panel
-        for w in self._phase_widgets:
-            if w in ep.children:
-                ep.children.remove(w)
+        sc = self._phases_scroll
+        sc.clear()
         self._phase_widgets = []
         if not self._selected_id:
             return
@@ -134,35 +255,37 @@ class BossTab(BasePanel):
             return
         phases = boss.get("phases", [])
         ftype = boss.get("fight_type", "orbital")
-        y = self._phase_y
+        y = 0
         for pi, phase in enumerate(phases):
             collapsed = pi in self._collapsed_phases
-            y = self._draw_phase(ep, y, pi, phase, ftype, collapsed)
+            y = self._draw_phase(sc, y, pi, phase, ftype, collapsed)
+        sc.set_content_height(y)
         self._phase_widget_y_end = y
 
-    def _draw_phase(self, ep, y, pi, phase, ftype, collapsed=False):
-        phase_bg = Panel(PADDING, y, ep.rect.w - PADDING * 2, 24, bg_color=(45, 48, 56))
-        phase_bg.parent = ep; ep.children.append(phase_bg)
+    def _draw_phase(self, sc, y, pi, phase, ftype, collapsed=False):
+        cw = sc.rect.w - sc.scrollbar_w
+        phase_bg = Panel(PADDING, y, cw - PADDING * 2, 24, bg_color=(45, 48, 56))
+        sc.add(phase_bg)
         self._phase_widgets.append(phase_bg)
 
         lbl_text = self.i18n.t("boss.phase_n").format(n=pi + 1)
         lbl = Label(PADDING + 6, y + 2, 120, 20, lbl_text, font_size=11, bold=True, color=(200, 210, 220))
-        lbl.parent = ep; ep.children.append(lbl)
+        sc.add(lbl)
         self._phase_widgets.append(lbl)
 
         hp_label = Label(140, y + 2, 90, 20,
                          self.i18n.t("boss.hp_threshold") + ": " + str(phase.get("hp_threshold", 0.0)),
                          font_size=10, color=(150, 160, 170))
-        hp_label.parent = ep; ep.children.append(hp_label)
+        sc.add(hp_label)
         self._phase_widgets.append(hp_label)
 
-        toggle_btn = Button(ep.rect.w - 80, y + 1, 18, 18,
+        toggle_btn = Button(cw - 80, y + 1, 18, 18,
                             "v" if collapsed else "^")
-        toggle_btn.parent = ep; ep.children.append(toggle_btn)
+        sc.add(toggle_btn)
         self._phase_widgets.append(toggle_btn)
 
-        del_btn = Button(ep.rect.w - 56, y + 1, 46, 18, self.i18n.t("boss.delete_phase"))
-        del_btn.parent = ep; ep.children.append(del_btn)
+        del_btn = Button(cw - 56, y + 1, 46, 18, self.i18n.t("boss.delete_phase"))
+        sc.add(del_btn)
         self._phase_widgets.append(del_btn)
 
         def make_toggle(idx):
@@ -197,84 +320,86 @@ class BossTab(BasePanel):
             p_schema = ft_config.get("phase_params", {})
             v_schema = ft_config.get("visual_schema", {})
 
-            sub_bg = Panel(PADDING, y, ep.rect.w - PADDING * 2, 1, bg_color=(50, 55, 65))
-            sub_bg.parent = ep; ep.children.append(sub_bg)
+            sub_bg = Panel(PADDING, y, cw - PADDING * 2, 1, bg_color=(50, 55, 65))
+            sc.add(sub_bg)
             self._phase_widgets.append(sub_bg)
+            y += 4
 
-            # Params section
-            for pkey, pdata in p_schema.items():
-                val = params.get(pkey, pdata.get("default"))
-                line_h = 24
-                lbl = Label(PADDING + 14, y + 2, 150, 20, pdata.get("label", pkey) + ":", font_size=10, color=(170, 175, 185))
-                lbl.parent = ep; ep.children.append(lbl)
-                self._phase_widgets.append(lbl)
+            # Params section (agrupada)
+            y = self._draw_section_fields(sc, y, pi, "params", p_schema,
+                                          ft_config.get("phase_groups", {}), params, cw)
 
-                ptype = pdata.get("type", "string")
-                inp_key = (pi, "params", pkey)
-
-                if ptype == "float":
-                    inp = TextInput(PADDING + 170, y + 1, 70, 20, default=str(val), max_chars=8, numeric_only=True)
-                    inp._boss_key = inp_key
-                    inp.parent = ep; ep.children.append(inp)
-                    self._phase_widgets.append(inp)
-                elif ptype == "int":
-                    inp = TextInput(PADDING + 170, y + 1, 60, 20, default=str(val), max_chars=5, numeric_only=True)
-                    inp._boss_key = inp_key
-                    inp.parent = ep; ep.children.append(inp)
-                    self._phase_widgets.append(inp)
-                elif ptype == "color":
-                    inp = TextInput(PADDING + 170, y + 1, 120, 20,
-                                    default=",".join(str(c) for c in val) if val and val != [None] else "",
-                                    max_chars=20, numeric_only=False)
-                    inp._boss_key = inp_key
-                    inp.parent = ep; ep.children.append(inp)
-                    self._phase_widgets.append(inp)
-                else:
-                    inp = TextInput(PADDING + 170, y + 1, 120, 20, default=str(val), max_chars=20, numeric_only=False)
-                    inp._boss_key = inp_key
-                    inp.parent = ep; ep.children.append(inp)
-                    self._phase_widgets.append(inp)
-                y += line_h
-
-            # Visual section
+            # Visual section (agrupada)
             if v_schema:
-                sep2 = Panel(PADDING + 10, y, ep.rect.w - PADDING * 2 - 20, 1, bg_color=(55, 60, 70))
-                sep2.parent = ep; ep.children.append(sep2)
+                sep2 = Panel(PADDING + 10, y, cw - PADDING * 2 - 20, 1, bg_color=(55, 60, 70))
+                sc.add(sep2)
                 self._phase_widgets.append(sep2)
                 y += 6
-
-            for pkey, pdata in v_schema.items():
-                val = visual.get(pkey, pdata.get("default"))
-                line_h = 24
-                lbl = Label(PADDING + 14, y + 2, 150, 20, pdata.get("label", pkey) + ":", font_size=10, color=(170, 175, 185))
-                lbl.parent = ep; ep.children.append(lbl)
-                self._phase_widgets.append(lbl)
-
-                inp_key = (pi, "visual", pkey)
-                ptype = pdata.get("type", "string")
-
-                if ptype == "color":
-                    if val is None:
-                        display = ""
-                    else:
-                        display = ",".join(str(c) for c in val)
-                    inp = TextInput(PADDING + 170, y + 1, 120, 20, default=display, max_chars=20, numeric_only=False)
-                    inp._boss_key = inp_key
-                    inp.parent = ep; ep.children.append(inp)
-                    self._phase_widgets.append(inp)
-                elif ptype == "int":
-                    inp = TextInput(PADDING + 170, y + 1, 60, 20, default=str(val), max_chars=5, numeric_only=True)
-                    inp._boss_key = inp_key
-                    inp.parent = ep; ep.children.append(inp)
-                    self._phase_widgets.append(inp)
-                else:
-                    inp = TextInput(PADDING + 170, y + 1, 120, 20, default=str(val), max_chars=20, numeric_only=False)
-                    inp._boss_key = inp_key
-                    inp.parent = ep; ep.children.append(inp)
-                    self._phase_widgets.append(inp)
-                y += line_h
+                y = self._draw_section_fields(sc, y, pi, "visual", v_schema,
+                                              ft_config.get("visual_groups", {}), visual, cw)
 
         return y + 4
+
+    def _group_fields_ordered(self, schema, groups_cfg):
+        """Devuelve [(gid, gcfg, [(pkey, pdata), ...])] respetando orden del schema
+        dentro de cada grupo y el orden de los grupos definidos en el schema."""
+        groups = {}
+        order = []
+        for gid in groups_cfg:
+            if gid not in groups:
+                groups[gid] = []
+                order.append(gid)
+        for pkey, pdata in schema.items():
+            gid = pdata.get("group") or "general"
+            if gid not in groups:
+                groups[gid] = []
+                order.append(gid)
+            groups[gid].append((pkey, pdata))
+        return [(gid, groups_cfg.get(gid, {}), groups[gid]) for gid in order]
+
+    def _draw_field(self, sc, x, y, pkey, pdata, val, inp_key):
+        lbl = Label(x, y + 2, 132, 20, pdata.get("label", pkey) + ":", font_size=10, color=(170, 175, 185))
+        sc.add(lbl)
+        self._phase_widgets.append(lbl)
+
+        ptype = pdata.get("type", "string")
+        inp_x = x + 136
+        if ptype == "float":
+            inp = TextInput(inp_x, y + 1, 70, 20, default=str(val), max_chars=8, numeric_only=True)
+        elif ptype == "int":
+            inp = TextInput(inp_x, y + 1, 60, 20, default=str(val), max_chars=5, numeric_only=True)
+        elif ptype == "color":
+            display = "" if val is None or val == [None] else ",".join(str(c) for c in val)
+            inp = TextInput(inp_x, y + 1, 110, 20, default=display, max_chars=24, numeric_only=False)
+        else:
+            inp = TextInput(inp_x, y + 1, 120, 20, default=str(val), max_chars=20, numeric_only=False)
+        inp._boss_key = inp_key
+        sc.add(inp)
+        self._phase_widgets.append(inp)
+
+    def _draw_section_fields(self, sc, y, pi, section, schema, groups_cfg, values, cw):
+        for gid, gcfg, fields in self._group_fields_ordered(schema, groups_cfg):
+            if not fields:
+                continue
+            gh = Label(PADDING + 14, y, 240, 14, self.i18n.t(gcfg.get("label_key", "boss.group.general")),
+                       font_size=10, bold=True, color=(180, 185, 195))
+            sc.add(gh)
+            self._phase_widgets.append(gh)
+            y += 14
+            gsep = Panel(PADDING + 10, y, cw - PADDING * 2 - 20, 1, bg_color=(55, 60, 70))
+            sc.add(gsep)
+            self._phase_widgets.append(gsep)
+            y += 4
+
+            col_x = [PADDING + 14, PADDING + 14 + 320]
+            for i in range(0, len(fields), 2):
+                row = fields[i:i + 2]
+                for j, (pkey, pdata) in enumerate(row):
+                    val = values.get(pkey, pdata.get("default"))
+                    inp_key = (pi, section, pkey)
+                    self._draw_field(sc, col_x[j], y, pkey, pdata, val, inp_key)
+                y += 24
+        return y
 
     def _on_add_phase(self):
         if not self._selected_id:
@@ -360,6 +485,23 @@ class BossTab(BasePanel):
         except ValueError:
             pass
         boss["icono"] = self._icon_input.text if self._icon_input.text else "?"
+        boss["sprite_sheet"] = self._sprite_selector.get_selected() or ""
+        try:
+            boss["sprite_rows"] = int(self._sprite_rows_input.text or "1")
+            boss["sprite_cols"] = int(self._sprite_cols_input.text or "1")
+        except ValueError:
+            boss["sprite_rows"] = 1
+            boss["sprite_cols"] = 1
+        try:
+            boss["sprite_frame_w"] = int(self._sprite_fw_input.text or "0")
+            boss["sprite_frame_h"] = int(self._sprite_fh_input.text or "0")
+        except ValueError:
+            boss["sprite_frame_w"] = 0
+            boss["sprite_frame_h"] = 0
+        try:
+            boss["sprite_interval"] = int(self._sprite_interval_input.text or "0")
+        except ValueError:
+            boss["sprite_interval"] = 0
         self._sync_phase_inputs(boss)
         set_boss(self._selected_id, boss)
         self._dirty = False
@@ -377,7 +519,8 @@ class BossTab(BasePanel):
                     phase[section] = {}
                 text = w.text.strip()
                 ft_config = BOSS_FIGHT_TYPES.get(boss.get("fight_type", "orbital"), {})
-                schema = ft_config.get(section + "_schema", {})
+                schema_key = "phase_params" if section == "params" else "visual_schema"
+                schema = ft_config.get(schema_key, {})
                 pdata = schema.get(pkey, {})
                 ptype = pdata.get("type", "string")
                 try:
@@ -412,6 +555,12 @@ class BossTab(BasePanel):
         self._needed_input.text = str(boss.get("proyectiles_necesarios", 3))
         self._dpc_input.text = str(boss.get("damage_per_cycle", 20))
         self._icon_input.text = boss.get("icono", "?")
+        self._sprite_selector.set_selected(boss.get("sprite_sheet", ""))
+        self._sprite_rows_input.text = str(boss.get("sprite_rows", 1))
+        self._sprite_cols_input.text = str(boss.get("sprite_cols", 1))
+        self._sprite_fw_input.text = str(boss.get("sprite_frame_w", 60))
+        self._sprite_fh_input.text = str(boss.get("sprite_frame_h", 60))
+        self._sprite_interval_input.text = str(boss.get("sprite_interval", 12))
 
     def handle_event(self, event):
         if not self.visible:
@@ -744,3 +893,56 @@ class _SimpleDropdown:
                 hint = fuente.render(f'"{self._filter_text}" ({len(self._filtered)})', True, (120, 140, 160))
                 surface.blit(hint, (dd_rect.x + 4, dd_rect.y + dd_rect.h - 16))
             surface.set_clip(clip)
+
+
+class _SheetPreview:
+    ROWS = 2
+    COLS = 4
+
+    def __init__(self, x, y, w, h):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.parent = None
+        self.visible = True
+        self.enabled = True
+
+    def handle_event(self, event):
+        return False
+
+    def _abs_rect(self):
+        if self.parent:
+            pr = (self.parent.get_abs_rect() if hasattr(self.parent, 'get_abs_rect')
+                  else self.parent.rect)
+            return pygame.Rect(pr.x + self.rect.x, pr.y + self.rect.y,
+                               self.rect.w, self.rect.h)
+        return self.rect.copy()
+
+    def draw(self, surface):
+        if not self.visible:
+            return
+        host = getattr(self, "host", None) or self.parent
+        loader = getattr(host, "_load_sheet_frames", None)
+        frames = loader() if loader else None
+
+        r = self._abs_rect()
+        pygame.draw.rect(surface, (40, 43, 50), r)
+        pygame.draw.rect(surface, (60, 65, 75), r, 1)
+
+        if not frames:
+            fuente = pygame.font.SysFont("Arial", 11)
+            txt = fuente.render("--", True, (130, 140, 150))
+            surface.blit(txt, (r.x + 6, r.y + (r.h - txt.get_height()) // 2))
+            return
+
+        cols = self.COLS
+        rows = self.ROWS
+        for i in range(min(len(frames), rows * cols)):
+            frame = frames[i]
+            px = r.x + 6 + (i % cols) * (64 + 6)
+            py = r.y + 6 + (i // cols) * (40 + 6)
+            fw, fh = frame.get_size()
+            scale = min(56 / fw, 34 / fh, 1.0)
+            show_w = max(1, int(fw * scale))
+            show_h = max(1, int(fh * scale))
+            scaled = pygame.transform.scale(frame, (show_w, show_h))
+            pygame.draw.rect(surface, (70, 75, 85), (px - 2, py - 2, show_w + 4, show_h + 4))
+            surface.blit(scaled, (px, py))

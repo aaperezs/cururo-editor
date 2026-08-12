@@ -1,0 +1,37 @@
+{
+  "main_menu": {
+    "titulo": "Orm",
+    "font": "Arial",
+    "font_size": 26,
+    "char_speed": 2,
+    "lineas": [
+      "Presiona ENTER para comenzar tu viaje."
+    ]
+  },
+  "prologue": {
+    "titulo": "",
+    "font": "Arial",
+    "font_size": 22,
+    "char_speed": 2,
+    "lineas": [
+      "Orm era la guardiana principal del Bosque Primigenio, el cual era la raíz de todo lo que existía en el universo. Ella, usando todos sus poderes, pudo incubar y custodiar a los huevos del mundo, criaturas creadas para la seguridad de todos.",
+      "Otras criaturas vieron con recelo cómo los huevos lentamente maduraban frente a los ojos de la orgullosa madre. Durante el eclipse, bajo el manto de la noche, los Cuervos de Hel irrumpieron y robaron toda la nidada.",
+      "Sin embargo, no pudieron romer los pequeños huevos. La madre, incluso al verse totalmente herida, lanzó un hechizo de protección.",
+      "Los llevaron a través de los mundos, hacia las profundidades de Niflheim, para un sacrificio que desgarrará el tejido de Yggdrasil.",
+      "A pesar de su herida, Orm se arrastró fuera del bosque jurando encontrar a sus pequeños antes de la terrible muerte. Para ello cruzará los reinos, crecerá en poder y recuperará lo que le pertenece.",
+      "El viaje comienza aquí. El lugar donde todo se pudre.",
+      "Presiona ESPACIO para comenzar tu viaje."
+    ]
+  },
+  "fin_mundo1": {
+    "titulo": "Mundo 1 Completo",
+    "font": "Arial",
+    "font_size": 22,
+    "char_speed": 2,
+    "lineas": [
+      "Has finalizado la demo de Orm",
+      "Tu viaje apenas comienza...",
+      "Continuará..."
+    ]
+  }
+}

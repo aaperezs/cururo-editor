@@ -1,0 +1,25 @@
+{
+  "mineral_hierro": {
+    "tipo": "mineral",
+    "nombre": "Mineral de Hierro",
+    "probabilidad": 0.18,
+    "icono": "\u26cf",
+    "descripcion": "\u00datil para forjar equipamiento"
+  },
+  "gema_azul": {
+    "tipo": "gema",
+    "nombre": "Gema Azul",
+    "probabilidad": 0.06,
+    "icono": "\ud83d\udd35",
+    "efecto": "recupera_pp",
+    "descripcion": "Una gema brillante que recarga tu energ\u00eda"
+  },
+  "escama_extra": {
+    "tipo": "escama",
+    "nombre": "Escama Ancestral",
+    "probabilidad": 0.10,
+    "icono": "\ud83d\udca0",
+    "efecto": "crece+1",
+    "descripcion": "Una escama antigua que te hace crecer"
+  }
+}

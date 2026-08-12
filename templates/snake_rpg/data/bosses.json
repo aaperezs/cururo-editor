@@ -1,0 +1,171 @@
+{
+  "tronco": {
+    "color": [139, 69, 19],
+    "color_herido": [200, 100, 50],
+    "nombre": "Tronco, el Ciervo Podrido",
+    "vida_maxima": 80,
+    "color_barra": [0, 200, 50],
+    "icono": "\ud83e\udd8c",
+    "fight_type": "orbital",
+    "proyectiles_necesarios": 3,
+    "damage_per_cycle": 20,
+    "phases": [
+      {
+        "hp_threshold": 0.61,
+        "params": {
+          "speed_mult": 1.0,
+          "attack_cooldown": 60,
+          "projectile_speed": 2.0,
+          "projectile_count_bonus": 0,
+          "comestible_chance": 0.6,
+          "angle_spread": 0.2,
+          "orbit_radius": 100,
+          "orbit_speed": 0.02,
+          "projectile_lifetime": 180,
+          "golden_radius": 10,
+          "red_radius": 8
+        },
+        "visual": {
+          "trunk_color": [95, 60, 28],
+          "eye_color": [150, 200, 80],
+          "eye_size": 5,
+          "rune": "\u00de\u00be",
+          "rune_color": [100, 200, 100],
+          "bar_color": null
+        }
+      },
+      {
+        "hp_threshold": 0.31,
+        "params": {
+          "speed_mult": 1.2,
+          "attack_cooldown": 45,
+          "projectile_speed": 2.5,
+          "projectile_count_bonus": 1,
+          "comestible_chance": 0.6,
+          "angle_spread": 0.25,
+          "orbit_radius": 100,
+          "orbit_speed": 0.025,
+          "projectile_lifetime": 180,
+          "golden_radius": 10,
+          "red_radius": 8
+        },
+        "visual": {
+          "trunk_color": [95, 60, 28],
+          "eye_color": [200, 200, 50],
+          "eye_size": 4,
+          "rune": "\u00de\u00bf",
+          "rune_color": [200, 200, 50],
+          "bar_color": null
+        }
+      },
+      {
+        "hp_threshold": 0.0,
+        "params": {
+          "speed_mult": 1.4,
+          "attack_cooldown": 30,
+          "projectile_speed": 3.0,
+          "projectile_count_bonus": 2,
+          "comestible_chance": 0.6,
+          "angle_spread": 0.3,
+          "orbit_radius": 100,
+          "orbit_speed": 0.03,
+          "projectile_lifetime": 180,
+          "golden_radius": 10,
+          "red_radius": 8
+        },
+        "visual": {
+          "trunk_color": [60, 35, 15],
+          "eye_color": [200, 50, 50],
+          "eye_size": 3,
+          "rune": "\u00de\u00c0",
+          "rune_color": [200, 50, 50],
+          "bar_color": null
+        }
+      }
+    ]
+  },
+  "gelida": {
+    "color": [100, 200, 255],
+    "color_herido": [200, 100, 255],
+    "nombre": "G\u00e9lida, la Ara\u00f1a de Cristal",
+    "vida_maxima": 100,
+    "color_barra": [50, 150, 255],
+    "icono": "\ud83d\udd77\ufe0f",
+    "fight_type": "orbital",
+    "proyectiles_necesarios": 4,
+    "damage_per_cycle": 20,
+    "phases": [
+      {
+        "hp_threshold": 0.61,
+        "params": {"speed_mult": 1.0, "attack_cooldown": 60, "projectile_speed": 2.0, "projectile_count_bonus": 0, "comestible_chance": 0.6, "angle_spread": 0.2, "orbit_radius": 100, "orbit_speed": 0.02, "projectile_lifetime": 180, "golden_radius": 10, "red_radius": 8},
+        "visual": {"trunk_color": [95, 60, 28], "eye_color": [150, 200, 80], "eye_size": 5, "rune": "\u00de\u00be", "rune_color": [100, 200, 100], "bar_color": null}
+      },
+      {
+        "hp_threshold": 0.31,
+        "params": {"speed_mult": 1.2, "attack_cooldown": 45, "projectile_speed": 2.5, "projectile_count_bonus": 1, "comestible_chance": 0.6, "angle_spread": 0.25, "orbit_radius": 100, "orbit_speed": 0.025, "projectile_lifetime": 180, "golden_radius": 10, "red_radius": 8},
+        "visual": {"trunk_color": [95, 60, 28], "eye_color": [200, 200, 50], "eye_size": 4, "rune": "\u00de\u00bf", "rune_color": [200, 200, 50], "bar_color": null}
+      },
+      {
+        "hp_threshold": 0.0,
+        "params": {"speed_mult": 1.4, "attack_cooldown": 30, "projectile_speed": 3.0, "projectile_count_bonus": 2, "comestible_chance": 0.6, "angle_spread": 0.3, "orbit_radius": 100, "orbit_speed": 0.03, "projectile_lifetime": 180, "golden_radius": 10, "red_radius": 8},
+        "visual": {"trunk_color": [60, 35, 15], "eye_color": [200, 50, 50], "eye_size": 3, "rune": "\u00de\u00c0", "rune_color": [200, 50, 50], "bar_color": null}
+      }
+    ]
+  },
+  "babak": {
+    "color": [0, 150, 100],
+    "color_herido": [0, 255, 100],
+    "nombre": "Babak, el Sapodrilo",
+    "vida_maxima": 120,
+    "color_barra": [0, 200, 100],
+    "icono": "\ud83d\udc38",
+    "fight_type": "orbital",
+    "proyectiles_necesarios": 4,
+    "damage_per_cycle": 20,
+    "phases": [
+      {
+        "hp_threshold": 0.61,
+        "params": {"speed_mult": 1.0, "attack_cooldown": 60, "projectile_speed": 2.0, "projectile_count_bonus": 0, "comestible_chance": 0.6, "angle_spread": 0.2, "orbit_radius": 100, "orbit_speed": 0.02, "projectile_lifetime": 180, "golden_radius": 10, "red_radius": 8},
+        "visual": {"trunk_color": [95, 60, 28], "eye_color": [150, 200, 80], "eye_size": 5, "rune": "\u00de\u00be", "rune_color": [100, 200, 100], "bar_color": null}
+      },
+      {
+        "hp_threshold": 0.31,
+        "params": {"speed_mult": 1.2, "attack_cooldown": 45, "projectile_speed": 2.5, "projectile_count_bonus": 1, "comestible_chance": 0.6, "angle_spread": 0.25, "orbit_radius": 100, "orbit_speed": 0.025, "projectile_lifetime": 180, "golden_radius": 10, "red_radius": 8},
+        "visual": {"trunk_color": [95, 60, 28], "eye_color": [200, 200, 50], "eye_size": 4, "rune": "\u00de\u00bf", "rune_color": [200, 200, 50], "bar_color": null}
+      },
+      {
+        "hp_threshold": 0.0,
+        "params": {"speed_mult": 1.4, "attack_cooldown": 30, "projectile_speed": 3.0, "projectile_count_bonus": 2, "comestible_chance": 0.6, "angle_spread": 0.3, "orbit_radius": 100, "orbit_speed": 0.03, "projectile_lifetime": 180, "golden_radius": 10, "red_radius": 8},
+        "visual": {"trunk_color": [60, 35, 15], "eye_color": [200, 50, 50], "eye_size": 3, "rune": "\u00de\u00c0", "rune_color": [200, 50, 50], "bar_color": null}
+      }
+    ]
+  },
+  "kaelen": {
+    "color": [255, 215, 0],
+    "color_herido": [255, 100, 0],
+    "nombre": "Kaelen, el Ave Tormenta",
+    "vida_maxima": 150,
+    "color_barra": [255, 200, 50],
+    "icono": "\ud83e\udd85",
+    "fight_type": "orbital",
+    "proyectiles_necesarios": 4,
+    "damage_per_cycle": 20,
+    "phases": [
+      {
+        "hp_threshold": 0.61,
+        "params": {"speed_mult": 1.0, "attack_cooldown": 60, "projectile_speed": 2.0, "projectile_count_bonus": 0, "comestible_chance": 0.6, "angle_spread": 0.2, "orbit_radius": 100, "orbit_speed": 0.02, "projectile_lifetime": 180, "golden_radius": 10, "red_radius": 8},
+        "visual": {"trunk_color": [95, 60, 28], "eye_color": [150, 200, 80], "eye_size": 5, "rune": "\u00de\u00be", "rune_color": [100, 200, 100], "bar_color": null}
+      },
+      {
+        "hp_threshold": 0.31,
+        "params": {"speed_mult": 1.2, "attack_cooldown": 45, "projectile_speed": 2.5, "projectile_count_bonus": 1, "comestible_chance": 0.6, "angle_spread": 0.25, "orbit_radius": 100, "orbit_speed": 0.025, "projectile_lifetime": 180, "golden_radius": 10, "red_radius": 8},
+        "visual": {"trunk_color": [95, 60, 28], "eye_color": [200, 200, 50], "eye_size": 4, "rune": "\u00de\u00bf", "rune_color": [200, 200, 50], "bar_color": null}
+      },
+      {
+        "hp_threshold": 0.0,
+        "params": {"speed_mult": 1.4, "attack_cooldown": 30, "projectile_speed": 3.0, "projectile_count_bonus": 2, "comestible_chance": 0.6, "angle_spread": 0.3, "orbit_radius": 100, "orbit_speed": 0.03, "projectile_lifetime": 180, "golden_radius": 10, "red_radius": 8},
+        "visual": {"trunk_color": [60, 35, 15], "eye_color": [200, 50, 50], "eye_size": 3, "rune": "\u00de\u00c0", "rune_color": [200, 50, 50], "bar_color": null}
+      }
+    ]
+  }
+}

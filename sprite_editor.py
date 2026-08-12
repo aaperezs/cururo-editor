@@ -1,16 +1,21 @@
-import pygame
+import math
 import os
-from editor.translation import I18n
-from editor.project import get_current_project
+
+import pygame
+
 from editor.panels.base_panel import BasePanel
+from editor.project import get_current_project
+from editor.tools import BucketTool, EraserTool, EyedropperTool, PencilTool
+from editor.tools.select import SelectTool
+from editor.tools.shapes import ShapeTool
+from editor.translation import I18n
 from editor.widgets.button import Button
-from editor.widgets.label import Label
-from editor.widgets.panel import Panel
 from editor.widgets.canvas import Canvas
 from editor.widgets.color_picker import ColorPicker
+from editor.widgets.dropdown import Dropdown
+from editor.widgets.label import Label
+from editor.widgets.panel import Panel
 from editor.widgets.slider import Slider
-from editor.tools import PencilTool, EraserTool, BucketTool, EyedropperTool
-from editor.sprite_registry import get_sprite_registry, sprite_registry_reload
 
 CHECK_C1 = (45, 45, 50)
 CHECK_C2 = (35, 35, 40)
@@ -18,12 +23,17 @@ CHECK_C2 = (35, 35, 40)
 TILE_W = 20
 TILE_H = 20
 
-MULTI_SIZES = [
-    (1, 1, "1x1"),
-    (1, 2, "1x2"),
-    (2, 1, "2x1"),
-    (2, 2, "2x2"),
+# Tamaños predefinidos en píxeles (el editor es herramienta de creación libre)
+SIZE_PRESETS = [
+    ("20x20", 20, 20),
+    ("40x40", 40, 40),
+    ("60x60", 60, 60),
+    ("80x80", 80, 80),
+    ("128x128", 128, 128),
+    ("160x120", 160, 120),
+    ("256x192", 256, 192),
 ]
+MAX_W, MAX_H = 256, 192
 
 class SpriteEditorPanel(BasePanel):
     def __init__(self, x, y, w, h, i18n):
@@ -35,6 +45,10 @@ class SpriteEditorPanel(BasePanel):
         self._redo_stack = []
         self._tile_rows = 1
         self._tile_cols = 1
+        self._cut_cell_w = TILE_W
+        self._cut_cell_h = TILE_H
+        self._sprite_w = 20
+        self._sprite_h = 20
 
         self._build_ui()
 
@@ -50,6 +64,8 @@ class SpriteEditorPanel(BasePanel):
         self._bucket = BucketTool()
         self._eyedropper = EyedropperTool()
         self._eyedropper.on_pick = self._on_eyedropper_pick
+        self._shapes = ShapeTool()
+        self._select = SelectTool()
         self._current_tool = self._pencil
 
         tools_data = [
@@ -57,6 +73,8 @@ class SpriteEditorPanel(BasePanel):
             (self._eraser, self.i18n.t("sprite.eraser")),
             (self._bucket, self.i18n.t("sprite.bucket")),
             (self._eyedropper, self.i18n.t("sprite.eyedropper")),
+            (self._shapes, self.i18n.t("sprite.shapes")),
+            (self._select, self.i18n.t("sprite.select")),
         ]
         self._tool_buttons = {}
         ty = 24
@@ -113,6 +131,38 @@ class SpriteEditorPanel(BasePanel):
             tool_panel.children.append(btn)
             self._sym_buttons[mode] = btn
 
+        # Shape options (rect / ellipse / line / filled)
+        shape_y = sym_y + 2 * 26 + 10
+        shape_lbl = Label(10, shape_y, 90, 14, "Forma:", font_size=10, align="center")
+        shape_lbl.parent = tool_panel
+        tool_panel.children.append(shape_lbl)
+        self._shape_widgets = [shape_lbl]
+        self._shape_buttons = {}
+        shape_ops = [
+            ("rect", "Rect"),
+            ("ellipse", "Elip"),
+            ("line", "Line"),
+        ]
+        for shp, label in shape_ops:
+            bx = 10 + shape_ops.index((shp, label)) * 30
+            btn = Button(bx, shape_y, 26, 22, label,
+                         callback=lambda s=shp: self._set_shape(s))
+            btn.toggle = True
+            btn.toggled = (shp == "rect")
+            btn.parent = tool_panel
+            tool_panel.children.append(btn)
+            self._shape_buttons[shp] = btn
+            self._shape_widgets.append(btn)
+        shape_y += 26
+        self._fill_btn = Button(10, shape_y, 90, 22, "Relleno",
+                                callback=self._toggle_filled)
+        self._fill_btn.toggle = True
+        self._fill_btn.toggled = False
+        self._fill_btn.parent = tool_panel
+        tool_panel.children.append(self._fill_btn)
+        self._shape_widgets.append(self._fill_btn)
+        self._update_shape_options_visibility()
+
         # Canvas (center)
         canvas_x = 122
         canvas_w = self.rect.w - canvas_x - 150
@@ -141,36 +191,108 @@ class SpriteEditorPanel(BasePanel):
         self._save_as_btn.parent = right_panel
         right_panel.children.append(self._save_as_btn)
 
-        # Size selector
+        # Size selector (dropdown con tamaños en px)
         y_off = 164
         szlbl = Label(8, y_off, 122, 16, "Tamaño:", font_size=11, align="center", color=(180, 190, 200))
         szlbl.parent = right_panel
         right_panel.children.append(szlbl)
         y_off += 18
-        self._size_btns = {}
-        for i, (r, c, label) in enumerate(MULTI_SIZES):
-            bx = 8 + (i % 2) * 62
-            by = y_off + (i // 2) * 30
-            btn = Button(bx, by, 58, 26, label,
-                         callback=lambda rr=r, cc=c: self._set_multi_size(rr, cc))
-            btn.toggle = True
-            btn.parent = right_panel
-            right_panel.children.append(btn)
-            self._size_btns[(r, c)] = btn
-        # Default: 1x1 selected
-        self._set_multi_size(1, 1)
+        self._size_btn = Button(8, y_off, 122, 26, "", callback=self._open_size_dropdown)
+        self._size_btn.parent = right_panel
+        right_panel.children.append(self._size_btn)
+        self._size_dropdown = Dropdown(8, y_off, 122, self._size_options(), self._on_size_selected)
+        self._size_dropdown.parent = right_panel
+        right_panel.children.append(self._size_dropdown)
+        y_off += 44
 
-        self._preview_label = Label(8, y_off + 64, 122, 20, "", font_size=11, align="center")
+        self._preview_label = Label(8, y_off, 122, 20, "", font_size=11, align="center")
         self._preview_label.parent = right_panel
         right_panel.children.append(self._preview_label)
 
-        # Cut-line toggle
-        cut_btn_y = y_off + 88
+        cut_btn_y = y_off + 24
         self._cut_btn = Button(8, cut_btn_y, 122, 24, "Cortes: On", callback=self._toggle_cut_lines)
         self._cut_btn.toggle = True
         self._cut_btn.toggled = True
         self._cut_btn.parent = right_panel
         right_panel.children.append(self._cut_btn)
+
+        self._size_btn.text = f"{self._sprite_w}x{self._sprite_h}"
+        self._right_content_bottom = cut_btn_y + self._cut_btn.rect.h
+        self._update_cut_lines()
+
+    def _size_options(self):
+        opts = [(f"{w}x{h}", f"{w}x{h}") for (label, w, h) in SIZE_PRESETS]
+        opts.append(("custom", "Personalizado..."))
+        return opts
+
+    def _open_size_dropdown(self):
+        self._size_dropdown.open(8, self._size_btn.rect.y + self._size_btn.rect.h)
+
+    def _on_size_selected(self, value):
+        label = value[0] if isinstance(value, tuple) else value
+        if label == "custom":
+            self._prompt_custom_size()
+            return
+        for (vlabel, w, h) in SIZE_PRESETS:
+            if vlabel == label:
+                self._set_size(w, h)
+                return
+
+    def _prompt_custom_size(self):
+        import tkinter as tk
+        from tkinter import simpledialog
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            w = simpledialog.askinteger("Tamaño", "Ancho (px):", initialvalue=self._sprite_w,
+                                        minvalue=1, maxvalue=MAX_W)
+            h = simpledialog.askinteger("Tamaño", "Alto (px):", initialvalue=self._sprite_h,
+                                        minvalue=1, maxvalue=MAX_H)
+        finally:
+            root.destroy()
+        if w and h:
+            self._set_size(w, h)
+
+    def _set_size(self, w, h):
+        w = max(1, min(MAX_W, int(w)))
+        h = max(1, min(MAX_H, int(h)))
+        self._sprite_w = w
+        self._sprite_h = h
+        self._tile_rows = (h // TILE_H) if h % TILE_H == 0 else 0
+        self._tile_cols = (w // TILE_W) if w % TILE_W == 0 else 0
+        self._cut_cell_w, self._cut_cell_h = self._compute_cut_cell(w, h)
+        self._update_cut_lines()
+        self._size_btn.text = f"{w}x{h}"
+        if self._surface is not None:
+            old_w = self._surface.get_width()
+            old_h = self._surface.get_height()
+            if old_w != w or old_h != h:
+                surf = pygame.Surface((w, h), pygame.SRCALPHA)
+                surf.fill((0, 0, 0, 0))
+                surf.blit(self._surface, (0, 0))
+                self._surface = surf
+                self._canvas.set_surface(self._surface)
+                self._canvas.fit()
+
+    def _compute_cut_cell(self, w, h):
+        """Celda de corte para mostrar los tiles.
+
+        - Si las dimensiones son múltiplos de 20 -> celda 20x20 (mapa).
+        - Si no, el mayor divisor común cuadrado para división regular
+          (ej: 256x192 -> 64x64).
+        """
+        if w % TILE_W == 0 and h % TILE_H == 0:
+            return TILE_W, TILE_H
+        g = math.gcd(w, h)
+        if g >= 2:
+            return g, g
+        return w, h
+
+    def _cut_grid(self):
+        if not self._cut_cell_w or not self._cut_cell_h:
+            return 0, 0
+        return (self._sprite_h // self._cut_cell_h,
+                self._sprite_w // self._cut_cell_w)
 
     def _toggle_cut_lines(self):
         show = not self._canvas._show_cut_lines
@@ -187,12 +309,15 @@ class SpriteEditorPanel(BasePanel):
 
     def _update_cut_lines(self):
         lines = []
-        if self._tile_cols > 1:
-            x = TILE_W * self._tile_cols
-            lines.append(((TILE_W, 0), (TILE_W, TILE_H * self._tile_rows)))
-        if self._tile_rows > 1:
-            y = TILE_H * self._tile_rows
-            lines.append(((0, TILE_H), (TILE_W * self._tile_cols, TILE_H)))
+        rows, cols = self._cut_grid()
+        if cols > 1:
+            for ci in range(1, cols):
+                x = ci * self._cut_cell_w
+                lines.append(((x, 0), (x, self._sprite_h)))
+        if rows > 1:
+            for ri in range(1, rows):
+                y = ri * self._cut_cell_h
+                lines.append(((0, y), (self._sprite_w, y)))
         self._canvas.set_cut_lines(lines)
 
     def _update_opacity_label(self):
@@ -213,33 +338,32 @@ class SpriteEditorPanel(BasePanel):
         self._current_tool = tool
         if self._canvas:
             self._canvas.set_tool(tool)
+        self._update_shape_options_visibility()
         if hasattr(tool, 'color') and self._color_picker:
             r, g, b = self._color_picker.selected_color
             tool.color = (r, g, b, self._opacity_slider.value)
+
+    def _update_shape_options_visibility(self):
+        show = self._current_tool is self._shapes
+        for w in getattr(self, "_shape_widgets", []):
+            w.visible = show
+
+    def _set_shape(self, shape):
+        self._shapes.set_shape(shape)
+        for s, btn in self._shape_buttons.items():
+            btn.toggled = (s == shape)
+
+    def _toggle_filled(self):
+        filled = not self._shapes.filled
+        self._shapes.set_filled(filled)
+        self._fill_btn.toggled = filled
+        self._fill_btn.text = "Relleno" if filled else "Borde"
 
     def _select_tool(self, tool):
         self._set_tool(tool)
         for tid, btn in self._tool_buttons.items():
             if hasattr(btn, 'toggled'):
                 btn.toggled = (tid == tool.id)
-
-    def _set_multi_size(self, rows, cols):
-        self._tile_rows = rows
-        self._tile_cols = cols
-        self._update_cut_lines()
-        for (r, c), btn in self._size_btns.items():
-            btn.toggled = (r == rows and c == cols)
-        if self._surface is not None:
-            old_w = self._surface.get_width()
-            old_h = self._surface.get_height()
-            new_w = cols * TILE_W
-            new_h = rows * TILE_H
-            if old_w != new_w or old_h != new_h:
-                surf = pygame.Surface((new_w, new_h), pygame.SRCALPHA)
-                surf.fill((0, 0, 0, 0))
-                surf.blit(self._surface, (0, 0))
-                self._surface = surf
-                self._canvas.set_surface(self._surface)
 
     def _on_eyedropper_pick(self, color):
         self._color_picker.selected_color = (color.r, color.g, color.b)
@@ -248,11 +372,12 @@ class SpriteEditorPanel(BasePanel):
         self._select_tool(self._pencil)
 
     def _new_sprite(self):
-        w = self._tile_cols * TILE_W
-        h = self._tile_rows * TILE_H
+        w = self._sprite_w
+        h = self._sprite_h
         self._surface = pygame.Surface((w, h), pygame.SRCALPHA)
         self._surface.fill((0, 0, 0, 0))
         self._canvas.set_surface(self._surface)
+        self._canvas.fit()
         self._current_path = None
         self._preview_label.text = "nuevo.png"
         self._clear_history()
@@ -279,29 +404,13 @@ class SpriteEditorPanel(BasePanel):
                 self._surface = pygame.Surface(img.get_size(), pygame.SRCALPHA)
                 self._surface.blit(img, (0, 0))
                 self._canvas.set_surface(self._surface)
+                self._canvas.fit()
                 self._current_path = path
                 self._preview_label.text = fname
                 self._clear_history()
-                # Detect multi-tile from registry or image size
-                stem = os.path.splitext(fname)[0]
-                reg = get_sprite_registry()
-                info = reg.get(stem)
-                if info and info.get("multi"):
-                    tiles = info.get("tiles", [])
-                    rows = max(t.get("row", 0) for t in tiles) + 1 if tiles else 1
-                    cols = max(t.get("col", 0) for t in tiles) + 1 if tiles else 1
-                    self._set_multi_size(rows, cols)
-                else:
-                    # Auto-detect from image dimensions
-                    iw = img.get_width()
-                    ih = img.get_height()
-                    if iw % TILE_W == 0 and ih % TILE_H == 0:
-                        auto_cols = iw // TILE_W
-                        auto_rows = ih // TILE_H
-                        if auto_cols > 1 or auto_rows > 1:
-                            self._set_multi_size(auto_rows, auto_cols)
-                            return
-                    self._set_multi_size(1, 1)
+                iw = img.get_width()
+                ih = img.get_height()
+                self._set_size(iw, ih)
             except pygame.error:
                 pass
 
@@ -346,7 +455,7 @@ class SpriteEditorPanel(BasePanel):
                 sub_path = os.path.join(assets_dir, f"{sub_stem}.png")
                 pygame.image.save(sub, sub_path)
                 tiles.append({"col": c, "row": r, "file": sub_stem, "z": 0, "behavior": "decorative"})
-        from editor.sprite_registry import _DYNAMIC_ENTRIES, _MERGED_NEEDS_REBUILD, _BUILT_KEYS
+        from editor.sprite_registry import _BUILT_KEYS, _DYNAMIC_ENTRIES, _MERGED_NEEDS_REBUILD
         _DYNAMIC_ENTRIES[stem] = {
             "file": stem,
             "display": stem.replace("_", " ").title(),
@@ -389,49 +498,69 @@ class SpriteEditorPanel(BasePanel):
 
     def draw(self, surface):
         super().draw(surface)
-        if self._surface is None:
-            return
+        if self._surface is not None:
+            self._draw_preview(surface)
 
+        # Dropdown encima de todo (lista de tamaños sobre botones y preview)
+        if self._size_dropdown.is_open:
+            self._size_dropdown.draw(surface)
+
+    def _draw_preview(self, surface):
         rp_abs_x = self.rect.x + self.rect.w - 144
         rp_abs_y = self.rect.y + 6
 
         preview_x = rp_abs_x + 8
-        preview_y = rp_abs_y + 200
+        preview_y = rp_abs_y + self._right_content_bottom + 10
 
-        sw = self._surface.get_width()
-        sh = self._surface.get_height()
+        # En un tileset multi-celda el preview muestra el primer tile
+        # (la forma real en que se verá en el juego)
+        rows, cols = self._cut_grid()
+        if cols > 1 or rows > 1:
+            tile_surf = self._surface.subsurface(
+                (0, 0, self._cut_cell_w, self._cut_cell_h))
+            sw = tile_surf.get_width()
+            sh = tile_surf.get_height()
+        else:
+            tile_surf = self._surface
+            sw = tile_surf.get_width()
+            sh = tile_surf.get_height()
 
-        # Label
+        # Label (dentro del area del preview, debajo de todos los botones)
         i18n = I18n.instancia()
         font = i18n.fuente(11) if i18n else pygame.font.SysFont("Arial", 11)
         label = font.render(f"Game: {sw}x{sh}", True, (180, 190, 200))
-        surface.blit(label, (preview_x, preview_y - 14))
+        surface.blit(label, (preview_x, preview_y))
 
-        # Checkerboard background
-        for py in range(sh):
-            for px in range(sw):
-                ck = CHECK_C1 if ((preview_x + px) // 4 + (preview_y + py) // 4) % 2 == 0 else CHECK_C2
-                pygame.draw.rect(surface, ck, (preview_x + px, preview_y + py, 1, 1))
+        img_y = preview_y + 16
 
-        # Sprite pixels at 1:1
-        for py in range(sh):
-            for px in range(sw):
-                color = self._surface.get_at((px, py))
-                if color.a == 0:
-                    continue
-                dx = preview_x + px
-                dy = preview_y + py
-                if color.a == 255:
-                    pygame.draw.rect(surface, (color.r, color.g, color.b), (dx, dy, 1, 1))
-                else:
-                    ck = CHECK_C1 if (px // 4 + py // 4) % 2 == 0 else CHECK_C2
-                    r = (color.r * color.a + ck[0] * (255 - color.a)) // 255
-                    g = (color.g * color.a + ck[1] * (255 - color.a)) // 255
-                    b = (color.b * color.a + ck[2] * (255 - color.a)) // 255
-                    pygame.draw.rect(surface, (r, g, b), (dx, dy, 1, 1))
+        # Escala para que quepa (soporta sprites hasta 256x192)
+        avail_w = 122
+        panel_bottom = self.rect.y + self.rect.h - 6
+        avail_h = max(1, panel_bottom - img_y - 4)
+        scale = min(avail_w / sw, avail_h / sh, 8.0)
+        nw = max(1, int(sw * scale))
+        nh = max(1, int(sh * scale))
+
+        preview_w = nw
+        preview_h = nh
+
+        # Checkerboard background (escalado con un solo blit)
+        checker = pygame.Surface((nw, nh), pygame.SRCALPHA)
+        for py in range(0, nh, 4):
+            for px in range(0, nw, 4):
+                ck = CHECK_C1 if ((preview_x + px) // 4 + (img_y + py) // 4) % 2 == 0 else CHECK_C2
+                checker.fill(ck, (px, py, min(4, nw - px), min(4, nh - py)))
+        surface.blit(checker, (preview_x, img_y))
+
+        # Primer tile escalado
+        if nw == sw and nh == sh:
+            scaled = tile_surf
+        else:
+            scaled = pygame.transform.smoothscale(tile_surf, (nw, nh))
+        surface.blit(scaled, (preview_x, img_y))
 
         # Border
-        pygame.draw.rect(surface, (100, 110, 120), (preview_x - 1, preview_y - 1, sw + 2, sh + 2), 1)
+        pygame.draw.rect(surface, (100, 110, 120), (preview_x - 1, img_y - 1, preview_w + 2, preview_h + 2), 1)
 
     def _save_snapshot(self):
         if self._surface is None:
@@ -463,7 +592,7 @@ class SpriteEditorPanel(BasePanel):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self._save_snapshot()
 
-        # Keyboard shortcuts for undo/redo
+        # Keyboard shortcuts for undo/redo + selection ops
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_z and (event.mod & pygame.KMOD_CTRL):
                 if event.mod & pygame.KMOD_SHIFT:
@@ -474,6 +603,32 @@ class SpriteEditorPanel(BasePanel):
             if event.key == pygame.K_y and (event.mod & pygame.KMOD_CTRL):
                 self._redo()
                 return True
+            if self._current_tool is self._select:
+                if event.key == pygame.K_ESCAPE:
+                    self._select.cancel()
+                    return True
+                if event.key == pygame.K_DELETE or event.key == pygame.K_BACKSPACE:
+                    if self._select.selection:
+                        self._save_snapshot()
+                        self._select.delete()
+                        self._canvas._invalidate()
+                    return True
+                if event.mod & pygame.KMOD_CTRL:
+                    if event.key == pygame.K_c:
+                        if self._select.selection:
+                            self._select.copy()
+                        return True
+                    if event.key == pygame.K_x:
+                        if self._select.selection:
+                            self._save_snapshot()
+                            self._select.cut()
+                            self._canvas._invalidate()
+                        return True
+                    if event.key == pygame.K_v:
+                        if self._select.clipboard is not None:
+                            self._select.paste()
+                        return True
+                return False
 
         # Sync color from color picker to tool (with opacity)
         if self._current_tool and self._color_picker:

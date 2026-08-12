@@ -1,0 +1,50 @@
+{
+  "combat": {
+    "damage_min": 2,
+    "damage_max": 4,
+    "invincibility_frames": 30,
+    "min_length": 3,
+    "manto_damage_min": 1,
+    "manto_damage_max": 2,
+    "boss_ram_damage_min": 3,
+    "boss_ram_damage_max": 6
+  },
+  "manto": {
+    "effect_duration": 60,
+    "color": [80, 80, 100]
+  },
+  "segment": {
+    "lifetime": 60,
+    "blink_speed": 5
+  },
+  "snake": {
+    "autocoil_cooldown": 2,
+    "initial_length": 3,
+    "speed_base": 10,
+    "speed_debt": 12
+  },
+  "food": {
+    "spawn_retries": 200,
+    "spawn_near_retries": 100,
+    "margin_cells": 2
+  },
+  "trade": {
+    "sell_1_cost": 1,
+    "sell_3_cost": 3,
+    "sell_5_cost": 5,
+    "borrow_amount": 3
+  },
+  "ui": {
+    "floating_text_duration": 30,
+    "floating_text_duration_long": 40,
+    "pause_overlay_alpha": 180,
+    "gameover_overlay_alpha": 200
+  },
+  "boss": {
+    "entrance_countdown_frames": 6,
+    "entrance_total_seconds": 3
+  },
+  "portal": {
+    "base_offset": 50
+  }
+}
