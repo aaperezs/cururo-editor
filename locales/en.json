@@ -339,5 +339,12 @@
   "audio.asset_id": "Asset:",
   "audio.volume": "Volume:",
   "audio.loop": "Loop",
-  "audio.scene_default": "Default scene:"
+  "audio.scene_default": "Default scene:",
+  "tab.audio.desc": "Game audio library.\n\nRegister BGM (background music) and SFX (sound effects) tracks, each with volume and loop settings.\n\nIn a later phase you will assign them: to elements (e.g. food makes a sound when picked up), to maps/scenes (per-level music) and to events (play_bgm, play_sfx).",
+  "tab.minigames.desc": "Minigames with their own mechanics.\n\nAvailable types: collection (timed), timing (key sequence) and puzzle (grid).\n\nThey are defined here and triggered from events with the \"Start minigame\" action. The result is applied to flags to continue the story.",
+  "tab.scripts.desc": "Python script editor.\n\nCreate, edit and delete .py scripts that the game runs as custom logic.\n\nUse the New / Save / Delete buttons. Type the script name and its content in the editor.",
+  "tab.assets.desc": "Project asset library.\n\nImport images (backgrounds, characters, CG, sprites, icons) and audio (BGM, SFX).\n\nEach asset is referenced by ID from other panels (elements, audio, scenes, etc.).",
+  "tab.characters.desc": "Characters for dialogues and visual novels.\n\nDefine name, text color and emotions (normal, happy, sad, angry, blushing, surprised).\n\nEach character is referenced by ID from the dialogues.",
+  "tab.scenes.desc": "Story scenes.\n\nOrganize chapters and scenes (dialogue, level, minigame, etc.) with entry conditions.\n\nScenes chain together to drive the game narrative.",
+  "tab.screens.desc": "Game screens.\n\nConfigure the boot screens and the text screens (cutscenes) shown at startup or triggered by events."
 }

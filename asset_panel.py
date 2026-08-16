@@ -35,6 +35,9 @@ class AssetPanel(BasePanel):
         prev_id = self._selected_id
         self._gui.clear_and_reset()
         w, h = self.rect.w, self.rect.h
+        self.mostrar_descripcion(
+            self.i18n.t("tab.assets.desc") if not get_assets() else ""
+        )
 
         # Toolbar
         self._import_btn = pygame_gui.elements.UIButton(
@@ -379,6 +382,8 @@ class AssetPanel(BasePanel):
         r = self.get_abs_rect()
         pygame.draw.rect(surface, self.bg_color, r)
         self._gui.draw_ui(surface.subsurface(r))
+        if self._descripcion:
+            self.draw_descripcion(surface)
         # Draw preview
         if self._preview_surf and self._selected_id:
             ep = self._editor_panel

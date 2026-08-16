@@ -287,17 +287,23 @@ class MapEditorPanel(BasePanel):
         if not p:
             print("[EDITOR] No hay proyecto seleccionado")
             return
-        runtime = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "orm", "main.py",
-        )
+        if getattr(sys, "frozen", False):
+            meipass = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+            runtime = os.path.join(meipass, "orm", "main.py")
+            cwd = os.path.dirname(sys.executable)
+            cmd = [sys.executable, "--runtime", "--project", p.root]
+        else:
+            src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            runtime = os.path.join(src, "orm", "main.py")
+            cwd = src
+            cmd = [sys.executable, runtime, "--project", p.root]
         if not os.path.exists(runtime):
             print(f"[EDITOR] No se encuentra el runtime en {runtime}")
             return
         try:
             subprocess.Popen(
-                [sys.executable, runtime, "--project", p.root],
-                cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                cmd,
+                cwd=cwd,
                 creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
             )
             print(f"[EDITOR] Juego lanzado para {p.root}")

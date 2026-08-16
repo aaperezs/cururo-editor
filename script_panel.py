@@ -26,6 +26,9 @@ class ScriptPanel(BasePanel):
 
     def _build_ui(self):
         self.clear()
+        self.mostrar_descripcion(
+            self.i18n.t("tab.scripts.desc") if not list_scripts() else ""
+        )
 
         tb = Panel(0, 0, self.rect.w, TOOLBAR_H, bg_color=(42, 46, 55), border_color=(60, 65, 75))
         self.add(tb)
@@ -148,6 +151,9 @@ class ScriptPanel(BasePanel):
             return
         r = self.get_abs_rect()
         pygame.draw.rect(surface, self.bg_color, r)
+
+        if self._descripcion:
+            self.draw_descripcion(surface)
 
         list_x = r.x
         list_y = r.y + TOOLBAR_H

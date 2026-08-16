@@ -2,17 +2,71 @@
 import sys
 import os
 
-_editor_root = os.path.dirname(os.path.abspath(__file__))
-_src_root = os.path.dirname(_editor_root)
+_FROZEN = bool(getattr(sys, "frozen", False))
+if _FROZEN:
+    _MEIPASS = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    _editor_root = os.path.join(_MEIPASS, "editor")
+    _src_root = _MEIPASS
+else:
+    _editor_root = os.path.dirname(os.path.abspath(__file__))
+    _src_root = os.path.dirname(_editor_root)
 if _src_root not in sys.path:
     sys.path.insert(0, _src_root)
+
+
+def _default_projects_dir():
+    """Directorio principal de búsqueda/creación de proyectos.
+
+    En frozen devuelve la carpeta del exe (y sus proyectos viven junto a él).
+    """
+    if _FROZEN:
+        return os.path.dirname(sys.executable)
+    return _src_root
+
+
+def _default_projects_dirs():
+    """Carpetas donde buscar proyectos existentes.
+
+    En frozen: carpeta del exe, su padre y el directorio de trabajo actual
+    (por si el exe se mueve y los proyectos viven en otra ruta).
+    """
+    if _FROZEN:
+        exe_dir = os.path.dirname(sys.executable)
+        dirs = [exe_dir]
+        parent = os.path.dirname(exe_dir)
+        if parent not in dirs:
+            dirs.append(parent)
+        cwd = os.getcwd()
+        if cwd not in dirs:
+            dirs.append(cwd)
+        return dirs
+    return [_src_root]
+
+
+# ── Modo runtime embebido (CururoEditor.exe --runtime --project <root>) ──
+# El editor empaqueta el runtime ORM dentro del mismo exe. Al lanzar el exe
+# con el flag --runtime se ejecuta el juego en lugar del editor.
+if _FROZEN and "--runtime" in sys.argv:
+    _rt_project = None
+    for _i, _arg in enumerate(sys.argv):
+        if _arg == "--project" and _i + 1 < len(sys.argv):
+            _rt_project = sys.argv[_i + 1]
+    _rt_orm_root = os.path.join(_MEIPASS, "orm")
+    _rt_main = os.path.join(_rt_orm_root, "main.py")
+    if os.path.exists(_rt_main):
+        sys.path.insert(0, _MEIPASS)
+        sys.path.insert(0, _rt_orm_root)
+        sys.argv = ["main.py", "--project", _rt_project] if _rt_project else ["main.py"]
+        import runpy
+        runpy.run_path(_rt_main, run_name="__main__")
+    sys.exit(0)
 
 project_root = None
 if len(sys.argv) > 1:
     project_root = os.path.abspath(sys.argv[1])
 else:
     from editor.project_dialog import ProjectDialog
-    search_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    search_dir = _default_projects_dirs()
     dialog = ProjectDialog(search_dir)
     project_root = dialog.run()
 
@@ -26,6 +80,10 @@ set_current_project(project_root)
 
 if not os.path.isdir(os.path.join(project_root, "utils")):
     _orm_root = os.path.join(_src_root, "orm")
+    if os.path.isdir(os.path.join(_orm_root, "utils")) and _orm_root not in sys.path:
+        sys.path.insert(0, _orm_root)
+elif _FROZEN:
+    _orm_root = os.path.join(_MEIPASS, "orm")
     if os.path.isdir(os.path.join(_orm_root, "utils")) and _orm_root not in sys.path:
         sys.path.insert(0, _orm_root)
 
@@ -267,7 +325,7 @@ class EditorApp:
                 return
             tpl = available[sel_tpl_idx]
             safe = name.strip().lower().replace(" ", "_").replace("-", "_")
-            search_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            search_dir = _default_projects_dir()
             path = os.path.join(search_dir, safe)
             n = 1
             while os.path.exists(path):
@@ -504,7 +562,38 @@ class EditorApp:
             self.save_workspace()
 
     def abrir_proyecto(self):
-        print("[Menu] Abrir Proyecto")
+        """Abre un selector de carpeta y carga el proyecto elegido."""
+        import tkinter as tk
+        from tkinter import filedialog, messagebox
+
+        from editor.project import set_current_project
+        from editor.elements import _load_elements
+        from editor.behaviors import _load as _load_behaviors
+
+        root = tk.Tk()
+        root.withdraw()
+        root.update()
+        try:
+            folder = filedialog.askdirectory(
+                title="Abrir Proyecto",
+                initialdir=_default_projects_dir(),
+            )
+        finally:
+            root.destroy()
+        if not folder:
+            return
+        if not os.path.isfile(os.path.join(folder, "cururo.json")):
+            messagebox.showerror(
+                "Abrir Proyecto",
+                "La carpeta no contiene un proyecto (falta cururo.json).",
+            )
+            return
+        self.save_workspace()
+        set_current_project(folder)
+        _load_elements()
+        _load_behaviors()
+        self._rebuild_ui()
+        self.save_workspace()
 
     def guardar(self):
         self.save_workspace()
@@ -515,6 +604,9 @@ class EditorApp:
 
     def exportar(self):
         """Exporta el juego como ejecutable standalone con PyInstaller"""
+        if _FROZEN:
+            print("[Export] No disponible en la version compilada del editor")
+            return
         self.save_workspace()
         from editor.project import get_current_project
         proj = get_current_project()
@@ -636,13 +728,21 @@ exe = EXE(
         import subprocess, sys, os
         from editor.project import get_current_project
         p = get_current_project()
+        if p is None:
+            print("[Menu] No hay proyecto seleccionado")
+            return
+        if _FROZEN:
+            exe = sys.executable
+            subprocess.Popen(
+                [exe, "--runtime", "--project", p.root],
+                cwd=os.path.dirname(exe),
+                creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
+            )
+            return
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         main_py = os.path.join(root, "orm", "main.py")
         if not os.path.exists(main_py):
             print(f"[Menu] No se encuentra {main_py}")
-            return
-        if p is None:
-            print("[Menu] No hay proyecto seleccionado")
             return
         subprocess.Popen(
             [sys.executable, main_py, "--project", p.root],
@@ -713,14 +813,16 @@ exe = EXE(
         mb = MenuBar(0, 0, self.ancho)
         available = self._get_available_panels()
 
-        archivo = MenuSection("Archivo", [
+        archivo_items = [
             MenuItem("Nuevo Proyecto", action=self.nuevo_proyecto, shortcut="Ctrl+N"),
             MenuItem("Abrir Proyecto...", action=self.abrir_proyecto, shortcut="Ctrl+O"),
             MenuItem("Guardar", action=self.guardar, shortcut="Ctrl+S"),
             MenuItem("Guardar Como...", action=self.guardar_como, shortcut="Ctrl+Shift+S"),
-            MenuItem(separator_before=True, label="Exportar...", action=self.exportar, shortcut="Ctrl+E"),
-            MenuItem(separator_before=True, label="Salir", action=self.salir, shortcut="Alt+F4"),
-        ])
+        ]
+        if not _FROZEN:
+            archivo_items.append(MenuItem(separator_before=True, label="Exportar...", action=self.exportar, shortcut="Ctrl+E"))
+        archivo_items.append(MenuItem(separator_before=True, label="Salir", action=self.salir, shortcut="Alt+F4"))
+        archivo = MenuSection("Archivo", archivo_items)
         mb.add_section(archivo.label, archivo.items)
 
         editar = MenuSection("Editar", [
@@ -730,42 +832,57 @@ exe = EXE(
         ])
         mb.add_section(editar.label, editar.items)
 
+        mundo_items = []
+        if "maps" in available:
+            mundo_items.append(MenuItem("Mapas", action=lambda: self._open_panel("maps"), shortcut="Ctrl+2"))
+        if "scenes" in available:
+            mundo_items.append(MenuItem("Escenas", action=lambda: self._open_panel("scenes")))
+        if "screens" in available:
+            mundo_items.append(MenuItem("Pantallas", action=lambda: self._open_panel("screens")))
+        if "characters" in available:
+            mundo_items.append(MenuItem("Personajes", action=lambda: self._open_panel("characters")))
+        if mundo_items:
+            mundo = MenuSection("Mundo", mundo_items)
+            mb.add_section(mundo.label, mundo.items)
+
+        contenido_items = []
+        for pid in ("elements", "items", "abilities", "bosses", "behaviors", "events", "dialogos"):
+            if pid in available:
+                label = {
+                    "elements": "Elementos",
+                    "items": "Items",
+                    "abilities": "Habilidades",
+                    "bosses": "Bosses",
+                    "behaviors": "Comportamientos",
+                    "events": "Eventos",
+                    "dialogos": "Dialogos",
+                }[pid]
+                contenido_items.append(
+                    MenuItem(label, action=lambda pid=pid: self._open_panel(pid))
+                )
+        if contenido_items:
+            contenido = MenuSection("Contenido", contenido_items)
+            mb.add_section(contenido.label, contenido.items)
+
         arte_items = []
         if "sprites" in available:
             arte_items.append(MenuItem("Sprites", action=lambda: self._open_panel("sprites"), shortcut="Ctrl+1"))
-        if "maps" in available:
-            arte_items.append(MenuItem("Mapas", action=lambda: self._open_panel("maps"), shortcut="Ctrl+2"))
         if "animations" in available:
             arte_items.append(MenuItem("Animaciones", action=lambda: self._open_panel("animations"), shortcut="Ctrl+3"))
-        if "scripts" in available:
-            arte_items.append(MenuItem("Scripts", action=lambda: self._open_panel("scripts"), separator_before=True))
-        if "screens" in available:
-            arte_items.append(MenuItem("Pantallas", action=lambda: self._open_panel("screens"), separator_before=True))
+        if "assets" in available:
+            arte_items.append(MenuItem("Assets", action=lambda: self._open_panel("assets")))
         if arte_items:
             arte = MenuSection("Arte", arte_items)
             mb.add_section(arte.label, arte.items)
 
-        herramientas_items = []
-        panel_labels = {
-            "elements": "Elementos",
-            "behaviors": "Comportamientos",
-            "abilities": "Habilidades",
-            "items": "Items",
-            "bosses": "Bosses",
-            "events": "Eventos",
-            "dialogos": "Dialogos",
-            "scenes": "Escenas",
-            "minigames": "Minijuegos",
-            "audio": "Audio",
-        }
-        for pid, label in panel_labels.items():
-            if pid in available:
-                herramientas_items.append(
-                    MenuItem(label, action=lambda pid=pid: self._open_panel(pid))
-                )
-        if herramientas_items:
-            herramientas = MenuSection("Herramientas", herramientas_items)
-            mb.add_section(herramientas.label, herramientas.items)
+        if "audio" in available:
+            mb.add_section("Audio", [MenuItem("Audio", action=lambda: self._open_panel("audio"))])
+
+        if "minigames" in available:
+            mb.add_section("Minijuegos", [MenuItem("Minijuegos", action=lambda: self._open_panel("minigames"))])
+
+        if "scripts" in available:
+            mb.add_section("Scripts", [MenuItem("Scripts", action=lambda: self._open_panel("scripts"))])
 
         ejecutar = MenuSection("Ejecutar", [
             MenuItem("Iniciar juego", action=self.run_game, shortcut="Ctrl+R"),

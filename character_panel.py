@@ -29,6 +29,9 @@ class CharacterPanel(BasePanel):
 
     def _build_ui(self):
         self.clear()
+        self.mostrar_descripcion(
+            self.i18n.t("tab.characters.desc") if not get_characters() else ""
+        )
         tb = Panel(0, 0, self.rect.w, TOOLBAR_H, bg_color=(42, 46, 55), border_color=(60, 65, 75))
         self.add(tb)
         self._new_btn = Button(8, 4, 72, 28, self.i18n.t("character.new"), callback=self._on_new)
@@ -206,6 +209,8 @@ class CharacterPanel(BasePanel):
         if not self.visible:
             return
         super().draw(surface)
+        if self._descripcion:
+            self.draw_descripcion(surface)
         ar = self.get_abs_rect()
         lx, ly = ar.x, ar.y + TOOLBAR_H
         lw, lh = LEFT_W, self.rect.h - TOOLBAR_H

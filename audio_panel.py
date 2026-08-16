@@ -33,6 +33,11 @@ class AudioPanel(BasePanel):
         w, h = self.rect.w, self.rect.h
         i = self.i18n
 
+        audio_list = get_audio_list()
+        self.mostrar_descripcion(
+            i.t("tab.audio.desc") if not audio_list else ""
+        )
+
         self._save_btn = pygame_gui.elements.UIButton(
             pygame.Rect(PADDING, 4, 80, 28), i.t("app.save"), self._gui
         )
@@ -251,6 +256,8 @@ class AudioPanel(BasePanel):
         r = self.get_abs_rect()
         pygame.draw.rect(surface, self.bg_color, r)
         self._gui.draw_ui(surface.subsurface(r))
+        if self._descripcion:
+            self.draw_descripcion(surface)
 
     def set_size(self, w, h):
         if self.rect.w != w or self.rect.h != h:

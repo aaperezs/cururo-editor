@@ -339,5 +339,12 @@
   "audio.asset_id": "Asset:",
   "audio.volume": "Volumen:",
   "audio.loop": "Repetir",
-  "audio.scene_default": "Escena por defecto:"
+  "audio.scene_default": "Escena por defecto:",
+  "tab.audio.desc": "Biblioteca de audio del juego.\n\nRegistrá pistas BGM (música de fondo) y SFX (efectos de sonido), cada una con volumen y repetición.\n\nEn una fase posterior podrás asignarlas: a elementos (ej. la comida suena al recogerla), a mapas/escenas (música por nivel) y a eventos (play_bgm, play_sfx).",
+  "tab.minigames.desc": "Minijuegos con mecánica propia.\n\nTipos disponibles: recolección (con tiempo), timing (secuencia de teclas) y puzzle (grilla).\n\nSe definen aquí y se disparan desde los eventos con la acción \"Iniciar minijuego\". El resultado se aplica a flags para continuar la historia.",
+  "tab.scripts.desc": "Editor de scripts en Python.\n\nCreá, editás y borrás scripts .py que el juego ejecuta como lógica personalizada.\n\nUsá los botones Nuevo / Guardar / Eliminar. Escribí el nombre del script y su contenido en el editor.",
+  "tab.assets.desc": "Biblioteca de assets del proyecto.\n\nImportá imágenes (fondos, personajes, CG, sprites, íconos) y audio (BGM, SFX).\n\nCada asset se referencia por ID desde otros paneles (elementos, audio, escenas, etc.).",
+  "tab.characters.desc": "Personajes para diálogos y novelas visuales.\n\nDefiní nombre, color de texto y emociones (normal, feliz, triste, enojado, sonrojado, sorpresa).\n\nCada personaje se referencia por ID desde los diálogos.",
+  "tab.scenes.desc": "Escenas de la historia.\n\nOrganizá capítulos y escenas (diálogo, nivel, minijuego, etc.) con condiciones de entrada.\n\nLas escenas se encadenan entre sí para dirigir la narrativa del juego.",
+  "tab.screens.desc": "Pantallas del juego.\n\nConfigurá las pantallas de arranque (boot screens) y las pantallas de texto (cutscenes) que se muestran al inicio o mediante eventos."
 }

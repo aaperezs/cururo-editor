@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import pygame
 from editor.project import discover_projects, list_templates, create_project
 from editor.categories import get_all_categories, get_template_dirs
@@ -14,8 +15,9 @@ _re_res = re.compile(r"^\d+x\d+$")
 
 class ProjectDialog:
     def __init__(self, search_dir):
-        self.search_dir = search_dir
-        self.projects = discover_projects(search_dir)
+        self.search_dirs = search_dir if isinstance(search_dir, (list, tuple)) else [search_dir]
+        self.search_dir = self.search_dirs[0] if self.search_dirs else "."
+        self.projects = self._discover_all()
         self.templates = list_templates()
         self.categories = get_all_categories()
         self.selected_index = 0
@@ -41,6 +43,50 @@ class ProjectDialog:
         self._cursor_timer = 0
         self._error_msg = ""
         self._focus = "name"
+
+    def _discover_all(self):
+        results = []
+        seen = set()
+        for d in self.search_dirs:
+            for p in discover_projects(d):
+                if p["path"] not in seen:
+                    seen.add(p["path"])
+                    results.append(p)
+        return results
+
+    def _open_project_folder(self):
+        """Abre un selector de carpeta y carga un proyecto existente (cururo.json)."""
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.update()
+        try:
+            folder = filedialog.askdirectory(
+                title="Seleccionar proyecto",
+                initialdir=self.search_dirs[0] if self.search_dirs else ".",
+            )
+        finally:
+            root.destroy()
+        if not folder:
+            return
+        manifest = os.path.join(folder, "cururo.json")
+        if not os.path.isfile(manifest):
+            self._error_msg = "La carpeta no contiene un proyecto (falta cururo.json)"
+            return
+        try:
+            with open(manifest, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            data = {}
+        self.result = {
+            "path": folder,
+            "name": data.get("name", os.path.basename(folder)),
+            "id": data.get("id", os.path.basename(folder)),
+            "category": data.get("category", "blank"),
+        }
+        self.done = True
 
     def _templates_for_cat(self):
         cat_id = self.categories[self._selected_cat_idx]["id"]
@@ -272,7 +318,8 @@ class ProjectDialog:
 
                 elif self.state == STATE_LIST:
                     if event.type == pygame.KEYDOWN:
-                        total = len(self.projects) + 1
+                        # Fila 0: "+ Nuevo Proyecto". Última fila: "Cargar Proyecto...".
+                        total = len(self.projects) + 2
                         if event.key == pygame.K_UP:
                             self.selected_index = max(0, self.selected_index - 1)
                         elif event.key == pygame.K_DOWN:
@@ -285,6 +332,8 @@ class ProjectDialog:
                                 self._new_res = "800x600"
                                 self._error_msg = ""
                                 self._focus = "name"
+                            elif self.selected_index == total - 1:
+                                self._open_project_folder()
                             elif self.projects:
                                 idx = self.selected_index - 1
                                 if 0 <= idx < len(self.projects):
@@ -307,6 +356,9 @@ class ProjectDialog:
                             if 40 <= mx <= self.W - 40 and ry <= my <= ry + self.ITEM_H - 4:
                                 self.result = p
                                 self.done = True
+                        ry_load = 80 + self.ITEM_H + len(self.projects) * self.ITEM_H
+                        if 40 <= mx <= self.W - 40 and ry_load <= my <= ry_load + self.ITEM_H - 4:
+                            self._open_project_folder()
 
                 elif self.state == STATE_NEW:
                     if event.type == pygame.KEYDOWN:
@@ -328,6 +380,10 @@ class ProjectDialog:
     def _draw_list(self, screen):
         title = self.font_title.render("Cururo Editor", True, (200, 210, 220))
         screen.blit(title, (self.W // 2 - title.get_width() // 2, 20))
+
+        if self._error_msg:
+            err = self.font.render(self._error_msg, True, (220, 80, 80))
+            screen.blit(err, (self.W // 2 - err.get_width() // 2, 44))
 
         sub = self.font.render("Proyectos:", True, (150, 160, 170))
         screen.blit(sub, (20, 55))
@@ -353,6 +409,15 @@ class ProjectDialog:
             cat = p.get("category", "?")
             pid = self.font.render(cat + " - " + p["id"], True, (130, 140, 150))
             screen.blit(pid, (54, ry + 22))
+
+        ry_load = 80 + self.ITEM_H + len(self.projects) * self.ITEM_H
+        sel_load = self.selected_index == len(self.projects) + 1
+        bg = (50, 60, 66) if sel_load else (36, 42, 46)
+        pygame.draw.rect(screen, bg, (40, ry_load, self.W - 80, self.ITEM_H - 4))
+        if sel_load:
+            pygame.draw.rect(screen, (60, 160, 180), (40, ry_load, 3, self.ITEM_H - 4))
+        load_txt = self.font_b.render("Cargar Proyecto...", True, (150, 220, 220))
+        screen.blit(load_txt, (54, ry_load + 10))
 
         if not self.projects:
             txt = self.font.render(
