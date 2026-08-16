@@ -8,7 +8,7 @@ CATEGORIES = {
             "sprites", "maps", "events", "elements", "behaviors",
             "abilities", "items", "bosses", "animations",
             "scripts", "screens", "dialogos", "characters", "assets",
-            "scenes", "minigames", "audio",
+            "scenes", "minigames", "audio", "menus",
         ],
     },
     "visual_novel": {

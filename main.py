@@ -122,6 +122,8 @@ from editor.minigame_data import _load_minigames
 from editor.minigame_panel import MiniGamePanel
 from editor.audio_data import _load_audio
 from editor.audio_panel import AudioPanel
+from editor.menu_data import _load_menus
+from editor.menu_panel import MenuTab
 
 
 PANEL_CLASSES = {
@@ -142,6 +144,7 @@ PANEL_CLASSES = {
     "scenes": ScenePanel,
     "minigames": MiniGamePanel,
     "audio": AudioPanel,
+    "menus": MenuTab,
 }
 
 MENUBAR_H = 26
@@ -231,6 +234,7 @@ class EditorApp:
         _load_scenes()
         _load_minigames()
         _load_audio()
+        _load_menus()
         editor_behaviors._load()
         self.ancho = 1100
         self.alto = 700
@@ -846,7 +850,7 @@ exe = EXE(
             mb.add_section(mundo.label, mundo.items)
 
         contenido_items = []
-        for pid in ("elements", "items", "abilities", "bosses", "behaviors", "events", "dialogos"):
+        for pid in ("elements", "items", "abilities", "bosses", "behaviors", "events", "dialogos", "menus"):
             if pid in available:
                 label = {
                     "elements": "Elementos",
@@ -856,6 +860,7 @@ exe = EXE(
                     "behaviors": "Comportamientos",
                     "events": "Eventos",
                     "dialogos": "Dialogos",
+                    "menus": "Menús",
                 }[pid]
                 contenido_items.append(
                     MenuItem(label, action=lambda pid=pid: self._open_panel(pid))

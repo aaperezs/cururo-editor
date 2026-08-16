@@ -1,0 +1,61 @@
+{
+  "menus": [
+    {
+      "id": "inventario",
+      "tecla": "i",
+      "titulo": "INVENTARIO",
+      "apartados": [
+        { "id": "habilidades", "nombre": "Habilidades", "tipo": "lista_habilidades" },
+        { "id": "items", "nombre": "Items", "tipo": "lista_consumibles" },
+        { "id": "equipo", "nombre": "Equipo", "tipo": "equipo" }
+      ]
+    },
+    {
+      "id": "opciones",
+      "tecla": "o",
+      "titulo": "OPCIONES",
+      "apartados": [
+        {
+          "id": "controles",
+          "nombre": "Controles",
+          "tipo": "controles"
+        },
+        {
+          "id": "video",
+          "nombre": "Video",
+          "tipo": "lista",
+          "items": [
+            {
+              "id": "resolucion",
+              "nombre": "Resolución",
+              "descripcion": "Tamaño de ventana (pendiente)",
+              "accion": { "tipo": "show_message", "params": { "mensaje": "Cambio de resolución próximamente" } }
+            },
+            {
+              "id": "volumen",
+              "nombre": "Volumen",
+              "descripcion": "Volumen del audio (pendiente)",
+              "accion": { "tipo": "show_message", "params": { "mensaje": "Volumen próximamente" } }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "relaciones",
+      "tecla": "r",
+      "titulo": "RELACIONES",
+      "apartados": [
+        {
+          "id": "vinculos",
+          "nombre": "Vínculos",
+          "tipo": "stats_flags",
+          "flags": [
+            { "id": "willow_afecto", "nombre": "Willow", "default": 0 },
+            { "id": "oraculo_afecto", "nombre": "Oráculo", "default": 0 }
+          ]
+        }
+      ]
+    }
+  ]
+}
