@@ -98,6 +98,8 @@ class MenuTab(BasePanel):
 
     def _build_ui(self):
         self._gui.clear_and_reset()
+        self._it_inps = None
+        self._ctrl_inps = None
         w, h = self.rect.w, self.rect.h
         i = self.i18n
 
@@ -652,8 +654,8 @@ class MenuTab(BasePanel):
             if inp:
                 c[fname] = inp.get_text().strip()
 
-    def _save_controles(self):
-        self._commit_controles()
+    def _persist_controles(self):
+        """Guarda en disco self._controles SIN leer el formulario."""
         if self._controles is None:
             return True
         bloq, adv = validar_controles(self._controles)
@@ -667,8 +669,13 @@ class MenuTab(BasePanel):
             self._set_status("✓ Guardado", error=False)
         return True
 
-    def _save_menu(self):
-        self._commit_current()
+    def _save_controles(self):
+        self._commit_controles()
+        return self._persist_controles()
+
+    def _persist(self):
+        """Guarda en disco self._menu y self._controles SIN leer el formulario."""
+        adv = []
         if self._selected_id and self._menu is not None:
             bloq, adv = validar_menu(self._menu)
             if bloq:
@@ -686,9 +693,11 @@ class MenuTab(BasePanel):
                 self._set_status("⚠ " + " · ".join(adv), error=False)
             else:
                 self._set_status("✓ Guardado", error=False)
-        else:
-            self._save_controles()
         return True
+
+    def _save_menu(self):
+        self._commit_current()
+        return self._persist()
 
     def _set_status(self, text, error=False):
         self._status_text = text
@@ -776,7 +785,7 @@ class MenuTab(BasePanel):
             return
         apartados[idx], apartados[nuevo] = apartados[nuevo], apartados[idx]
         self._apartado_idx = nuevo
-        self._save_menu()
+        self._persist()
         self._build_ui()
 
     def _on_add_apartado(self):
@@ -791,7 +800,7 @@ class MenuTab(BasePanel):
             "tipo": "lista",
         })
         self._apartado_idx = len(apartados) - 1
-        self._save_menu()
+        self._persist()
         self._build_ui()
 
     def _on_del_apartado(self):
@@ -805,7 +814,7 @@ class MenuTab(BasePanel):
         self._apartado_idx = max(0, min(self._apartado_idx - 1, len(apartados) - 1))
         if not apartados:
             self._apartado_idx = None
-        self._save_menu()
+        self._persist()
         self._build_ui()
 
     # ── Items / Flags ────────────────────────────────────────
@@ -1106,7 +1115,7 @@ class MenuTab(BasePanel):
                     idx = 0
                 self._apartado_idx = idx
                 self._item_idx = None
-                self._save_menu()
+                self._persist()
                 self._build_ui()
                 return True
             if hasattr(self, '_cfg_list') and e.ui_element == self._cfg_list:
@@ -1118,7 +1127,7 @@ class MenuTab(BasePanel):
                 except (ValueError, AttributeError):
                     idx = 0
                 self._item_idx = idx
-                self._save_menu()
+                self._persist()
                 self._build_ui()
                 return True
             if hasattr(self, '_ctrl_list') and e.ui_element == self._ctrl_list:
@@ -1130,19 +1139,19 @@ class MenuTab(BasePanel):
                 except (ValueError, AttributeError):
                     idx = 0
                 self._control_idx = idx
-                self._save_controles()
+                self._persist_controles()
                 self._build_ui()
                 return True
         elif e.type == pygame_gui.UI_DROP_DOWN_MENU_CHANGED:
             if hasattr(self, '_ap_tipo_dd') and e.ui_element == self._ap_tipo_dd:
                 self._commit_current()
                 self._item_idx = None
-                self._save_menu()
+                self._persist()
                 self._build_ui()
                 return True
             if hasattr(self, '_it_accion_dd') and e.ui_element == self._it_accion_dd:
                 self._commit_current()
-                self._save_menu()
+                self._persist()
                 self._build_ui()
                 return True
 

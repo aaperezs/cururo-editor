@@ -18,6 +18,8 @@ ACCIONES = {
     "set_flag": ("Poner flag", [("flag", "Flag", "text", ""), ("valor", "Valor", "bool", True)]),
     "add_flag": ("Sumar flag", [("flag", "Flag", "text", ""), ("cantidad", "Cantidad", "int", 1)]),
     "clear_flag": ("Limpiar flag", [("flag", "Flag", "text", "")]),
+    "give_moneda": ("Dar moneda", [("moneda", "Moneda", "text", ""), ("cantidad", "Cantidad", "int", 1)]),
+    "remove_moneda": ("Quitar moneda", [("moneda", "Moneda", "text", ""), ("cantidad", "Cantidad", "int", 1)]),
     "change_map": ("Cambiar mapa", [("nivel", "Nivel", "text", ""), ("exit_id", "Exit ID", "text", "")]),
     "iniciar_dialogo": ("Iniciar diálogo", [("dialogo_id", "ID diálogo", "text", "")]),
     "dialogo_tree": ("Árbol de diálogo", [("dialogo_id", "ID diálogo", "text", "")]),

@@ -1,0 +1,12 @@
+{
+  "monedas": [
+    {
+      "id": "escamas",
+      "label": "Escamas",
+      "valor_inicial": 0,
+      "icono": "\u25c6",
+      "color": [210, 185, 100],
+      "principal": true
+    }
+  ]
+}

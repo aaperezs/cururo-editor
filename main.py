@@ -124,6 +124,7 @@ from editor.audio_data import _load_audio
 from editor.audio_panel import AudioPanel
 from editor.menu_data import _load_menus
 from editor.menu_panel import MenuTab
+from editor.monedas_panel import MonedasTab
 
 
 PANEL_CLASSES = {
@@ -145,6 +146,7 @@ PANEL_CLASSES = {
     "minigames": MiniGamePanel,
     "audio": AudioPanel,
     "menus": MenuTab,
+    "monedas": MonedasTab,
 }
 
 MENUBAR_H = 26

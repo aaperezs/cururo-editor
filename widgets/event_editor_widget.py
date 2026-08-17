@@ -37,10 +37,16 @@ def _get_boss_list():
     return [(b, b) for b in _get_all_bosses()]
 
 
+def _get_moneda_list():
+    from editor.monedas_data import get_monedas
+
+    return [(m.get("id", ""), m.get("label") or m.get("id", "")) for m in get_monedas()]
+
+
 TRIGGERS = ["contact", "interact", "on_hit", "on_boss_defeated", "on_event_finalized"]
 
 CONDITION_TYPES = [
-    "escamas", "item_count", "flag", "ability", "ability_equipped", "pp",
+    "has_moneda", "item_count", "flag", "ability", "ability_equipped", "pp",
     "evaluar_evento", "damage",
 ]
 
@@ -48,7 +54,7 @@ ACTION_TYPES = [
     "show_message", "replace_sprite", "remove_sprite", "spawn_entity",
     "start_dialogue", "change_map", "mover_a",
     "give_item", "remove_item", "consume_pp",
-    "set_flag", "clear_flag", "remove_escamas", "damage",
+    "set_flag", "clear_flag", "give_moneda", "remove_moneda", "damage",
     "run_script", "start_boss_fight", "iniciar_dialogo", "esperar",
     "bloquear_eventos", "bloquear_mandos",
     "desbloquear_habilidad", "equipar_habilidad", "cambiar_skin",
@@ -57,7 +63,7 @@ ACTION_TYPES = [
 ]
 
 CONDITION_PARAMS = {
-    "escamas": {"operador": ">=", "valor": 1},
+    "has_moneda": {"moneda": "", "operador": ">=", "valor": 1},
     "item_count": {"item": "", "operador": ">=", "valor": 1},
     "flag": {"flag": "", "operador": "es_verdadero"},
     "ability": {"ability": "", "operador": "tiene"},
@@ -80,7 +86,8 @@ ACTION_PARAMS = {
     "consume_pp": {"cantidad": 1},
     "set_flag": {"flag": ""},
     "clear_flag": {"flag": ""},
-    "remove_escamas": {"cantidad": 1},
+    "give_moneda": {"moneda": "", "cantidad": 1},
+    "remove_moneda": {"moneda": "", "cantidad": 1},
     "damage": {"cantidad": 1, "mensaje": ""},
     "run_script": {"function_name": "", "args": ""},
     "start_boss_fight": {},
@@ -99,11 +106,11 @@ ACTION_PARAMS = {
 }
 
 # Param keys that should show a dropdown instead of text field
-DROPDOWN_PARAMS = {"ability", "item", "sprite_id", "nivel", "operador", "estado", "bloquear", "visible", "habilidad", "demo_id", "boss_id", "ventana_id", "direccion", "tecla"}
+DROPDOWN_PARAMS = {"ability", "item", "sprite_id", "nivel", "operador", "estado", "bloquear", "visible", "habilidad", "demo_id", "boss_id", "ventana_id", "direccion", "tecla", "moneda"}
 
 # Operator options per condition type
 COND_OPERATOR_OPTIONS = {
-    "escamas": [(">=", ">="), ("<=", "<="), (">", ">"), ("<", "<"), ("==", "=="), ("!=", "!=")],
+    "has_moneda": [(">=", ">="), ("<=", "<="), (">", ">"), ("<", "<"), ("==", "=="), ("!=", "!=")],
     "item_count": [(">=", ">="), ("<=", "<="), (">", ">"), ("<", "<"), ("==", "=="), ("!=", "!=")],
     "pp": [(">=", ">="), ("<=", "<="), (">", ">"), ("<", "<"), ("==", "=="), ("!=", "!=")],
     "flag": [("es_verdadero", "Es verdadero"), ("es_falso", "Es falso")],
@@ -357,7 +364,7 @@ class EventEditorWidget(Widget):
             conds = ev.get("condiciones", [])
             cy += 14
             for ci, cond in enumerate(conds):
-                ct = cond.get("tipo", "escamas")
+                ct = cond.get("tipo", "has_moneda")
                 # Remove X (check first to avoid overlap)
                 rx = cx + cw - 16
                 if rx <= mx <= rx + 14 and cy + 1 <= my <= cy + 15:
@@ -778,7 +785,7 @@ class EventEditorWidget(Widget):
                 ev_idx = target[1]
                 if 0 <= ev_idx < len(self.eventos):
                     self.eventos[ev_idx]["condiciones"].append(
-                        {"tipo": "escamas", "params": dict(CONDITION_PARAMS["escamas"])}
+                        {"tipo": "has_moneda", "params": dict(CONDITION_PARAMS["has_moneda"])}
                     )
                     self._mark_dirty()
                 return True
@@ -804,6 +811,8 @@ class EventEditorWidget(Widget):
         return False
 
     def _get_param_options(self, pk, ct=None):
+        if pk == "moneda":
+            return _get_moneda_list()
         if pk == "ability":
             return _get_ability_list()
         if pk == "item":
@@ -989,7 +998,7 @@ class EventEditorWidget(Widget):
             conds = ev.get("condiciones", [])
             first_cond_y = cy if conds else None
             for ci, cond in enumerate(conds):
-                ct = cond.get("tipo", "escamas")
+                ct = cond.get("tipo", "has_moneda")
                 ct_label = i.t(self._cond_locale(ct))
                 ct_w = min(100, fpeq.size(ct_label + " ▼")[0] + 6)
                 ct_w = max(ct_w, 80)
