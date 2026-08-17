@@ -105,3 +105,49 @@ def rename_menu(old_id, new_id):
             _save_menus()
             return True
     return False
+
+
+def validar_menu(menu, todos=None):
+    """Valida un menú. Devuelve (bloqueantes, advertencias) como listas de str.
+
+    Bloqueantes: impiden guardar (p. ej. tecla duplicada entre menús).
+    Advertencias: se muestran pero no impiden guardar.
+    """
+    todos = todos if todos is not None else _MENUS_DATA
+    bloq, adv = [], []
+    mid = menu.get("id", "")
+    tecla = (menu.get("tecla") or "").strip()
+    titulo = (menu.get("titulo") or "").strip()
+
+    if not tecla:
+        adv.append(f"[{mid}] sin tecla de apertura")
+    else:
+        for otro in todos:
+            if otro.get("id") == mid:
+                continue
+            if (otro.get("tecla") or "").strip() == tecla:
+                bloq.append(f"Tecla '{tecla}' ya usada por '{otro.get('id')}'")
+                break
+    if not titulo:
+        adv.append(f"[{mid}] sin título")
+
+    apartados = menu.get("apartados", [])
+    if not apartados:
+        adv.append(f"[{mid}] sin apartados")
+    ids_ap = set()
+    for ap in apartados:
+        aid = ap.get("id", "")
+        if aid in ids_ap:
+            bloq.append(f"[{mid}] apartado id duplicado '{aid}'")
+        ids_ap.add(aid)
+        for key in ("items", "flags"):
+            items = ap.get(key) or []
+            if not isinstance(items, list):
+                items = []
+            ids = set()
+            for it in items:
+                iid = it.get("id", "")
+                if iid in ids:
+                    bloq.append(f"[{mid}/{aid}] {key} id duplicado '{iid}'")
+                ids.add(iid)
+    return bloq, adv
