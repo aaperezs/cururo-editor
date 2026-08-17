@@ -143,7 +143,7 @@ malformado.
 
 ---
 
-### Fase 4 — Reordenar apartados (MEDIA)
+### Fase 4 — Reordenar apartados (MEDIA) ✅ Implementada
 
 **Problema**: hoy solo se agregan/eliminan apartados (+/X); no se puede cambiar el
 orden, y el runtime los recorre en orden (TAB).
@@ -152,9 +152,12 @@ orden, y el runtime los recorre en orden (TAB).
 
 **Archivos**: `editor/menu_panel.py`.
 
+**Hecho (2026-08-17)**: botones ↑/↓ en la lista de apartados (edición y vista previa);
+`_on_ap_move(direccion)` reordena `apartados[]` con límites seguros y guarda.
+
 ---
 
-### Fase 5 — Mapeo de controles (MEDIA)
+### Fase 5 — Mapeo de controles (MEDIA) ✅ Implementada
 
 **Problema**: el renderer `controles` es de solo lectura (lee `data/controles.json`);
 un usuario querrá definir/remapear teclas desde el editor.
@@ -164,9 +167,14 @@ con preview del renderer (Fase 2) y validación de teclas duplicadas.
 
 **Archivos**: `editor/menu_panel.py` (o sub-pestaña), nuevo `editor/controls_data.py`.
 
+**Hecho (2026-08-17)**: `editor/controls_data.py` (nuevo) con CRUD y
+`validar_controles`; en el apartado de tipo `controles` se muestra un editor de
+bindings (lista + acción/tecla + add/del/dup) que escribe `data/controles.json` con
+teclas duplicadas bloqueadas.
+
 ---
 
-### Fase 6 — Más tipos de renderer / stats dinámicos (BAJA)
+### Fase 6 — Más tipos de renderer / stats dinámicos (BAJA) ✅ Implementada
 
 **Problema**: `stats_flags` solo muestra flags del estado; no hay stats con valores
 (nivel, progreso, inventario…).
@@ -179,9 +187,13 @@ referencia (`estado.<campo>` o flag).
 **Archivos**: `orm/systems/ui/components/inventory_panels.py`, `orm/systems/menu.py`,
 `editor/menu_panel.py`.
 
+**Hecho (2026-08-17)**: renderer `stats` en `inventory_panels.py` (valor literal,
+`flag:<id>` o `state:<campo>`), registrado en `RENDERERS`; el editor soporta el tipo
+`stats` con campos id/nombre/valor y valida ids duplicados.
+
 ---
 
-### Fase 7 — Plantillas y flujo (BAJA)
+### Fase 7 — Plantillas y flujo (BAJA) ✅ Parcial
 
 **Qué hacer**:
 - Crear un menú desde plantillas completas (inventario, opciones, relaciones) en vez
@@ -192,6 +204,13 @@ referencia (`estado.<campo>` o flag).
 
 **Archivos**: `editor/menu_panel.py`, `orm/systems/stack_manager.py`,
 `editor/templates/snake_rpg/data/menus.json`.
+
+**Hecho (2026-08-17)**:
+- Plantillas en `menu_data.PLANTILLAS` (vacío/inventario/opciones/relaciones, en
+  código); "Nuevo" muestra un selector de plantilla.
+- Acción `abrir_menu {menu_id}` añadida a `stack_manager._ejecutar_accion` y al
+  registro de acciones del editor.
+- Pendiente: "menú inicial / orden de menús" (necesita decisión de flujo del runtime).
 
 ## 3. Fuera de alcance (por ahora)
 
@@ -216,5 +235,7 @@ referencia (`estado.<campo>` o flag).
 1. Fase 1 (items/acciones) — base para todo lo demás. ✅
 2. Fase 3 (validaciones) — junto a la Fase 1. ✅
 3. Fase 2 (preview). ✅
-4. Fase 4 (reordenar).
-5. Fases 5-7 cuando el usuario las pida.
+4. Fase 4 (reordenar). ✅
+5. Fase 5 (controles). ✅
+6. Fase 6 (stats). ✅
+7. Fase 7 (plantillas + abrir_menu). ✅ Parcial

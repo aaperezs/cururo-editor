@@ -32,6 +32,53 @@ def _load_menus():
         except (json.JSONDecodeError, IOError):
             _MENUS_DATA = []
 
+# Plantillas de menú (definidas en código para no depender de archivos de data/).
+PLANTILLAS = {
+    "vacio": {
+        "tecla": "", "titulo": "",
+        "apartados": [
+            {"id": "apartado_1", "nombre": "Apartado 1", "tipo": "lista"},
+        ],
+    },
+    "inventario": {
+        "tecla": "i", "titulo": "INVENTARIO",
+        "apartados": [
+            {"id": "habilidades", "nombre": "Habilidades", "tipo": "lista_habilidades"},
+            {"id": "items", "nombre": "Items", "tipo": "lista_consumibles"},
+            {"id": "equipo", "nombre": "Equipo", "tipo": "equipo"},
+        ],
+    },
+    "opciones": {
+        "tecla": "o", "titulo": "OPCIONES",
+        "apartados": [
+            {"id": "controles", "nombre": "Controles", "tipo": "controles"},
+            {
+                "id": "video", "nombre": "Video", "tipo": "lista",
+                "items": [
+                    {"id": "resolucion", "nombre": "Resolución", "descripcion": "",
+                     "accion": {"tipo": "show_message",
+                                "params": {"mensaje": "Cambio de resolución próximamente"}}},
+                    {"id": "volumen", "nombre": "Volumen", "descripcion": "",
+                     "accion": {"tipo": "show_message",
+                                "params": {"mensaje": "Volumen próximamente"}}},
+                ],
+            },
+        ],
+    },
+    "relaciones": {
+        "tecla": "r", "titulo": "RELACIONES",
+        "apartados": [
+            {
+                "id": "vinculos", "nombre": "Vínculos", "tipo": "stats_flags",
+                "flags": [
+                    {"id": "willow_afecto", "nombre": "Willow", "default": 0},
+                    {"id": "oraculo_afecto", "nombre": "Oráculo", "default": 0},
+                ],
+            },
+        ],
+    },
+}
+
 
 def _save_menus():
     path = _get_path()
@@ -79,17 +126,15 @@ def menu_exists(mid):
     return mid in get_all_menus()
 
 
-def create_menu(mid):
+def create_menu(mid, plantilla="vacio"):
     if menu_exists(mid):
         return False
-    _MENUS_DATA.append({
-        "id": mid,
-        "tecla": "",
-        "titulo": mid.upper(),
-        "apartados": [
-            {"id": "apartado_1", "nombre": "Apartado 1", "tipo": "lista"},
-        ],
-    })
+    tpl = PLANTILLAS.get(plantilla, PLANTILLAS["vacio"])
+    entry = copy.deepcopy(tpl)
+    entry["id"] = mid
+    if not entry.get("titulo"):
+        entry["titulo"] = mid.upper()
+    _MENUS_DATA.append(entry)
     _save_menus()
     return True
 
@@ -140,7 +185,7 @@ def validar_menu(menu, todos=None):
         if aid in ids_ap:
             bloq.append(f"[{mid}] apartado id duplicado '{aid}'")
         ids_ap.add(aid)
-        for key in ("items", "flags"):
+        for key in ("items", "flags", "stats"):
             items = ap.get(key) or []
             if not isinstance(items, list):
                 items = []

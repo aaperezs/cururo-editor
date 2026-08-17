@@ -38,6 +38,7 @@ ACCIONES = {
     "mostrar_opciones": ("Mostrar opciones", [("opciones", "Opciones (json)", "text", "")]),
     "desbloquear_habilidad": ("Desbloquear habilidad", [("habilidad", "Habilidad", "text", "")]),
     "cambiar_skin": ("Cambiar skin", [("sprite_id", "Sprite", "text", "")]),
+    "abrir_menu": ("Abrir menú", [("menu_id", "Menú", "text", "")]),
     "fin_demo": ("Fin demo", []),
 }
 

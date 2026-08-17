@@ -25,6 +25,12 @@ from editor.menu_data import (
     set_menu,
     validar_menu,
 )
+from editor.controls_data import (
+    _load_controles,
+    get_controles,
+    set_controles,
+    validar_controles,
+)
 
 PADDING = 6
 TOOLBAR_H = 36
@@ -37,6 +43,7 @@ TIPO_OPTIONS = [
     ("opciones", "Opciones"),
     ("controles", "Controles"),
     ("stats_flags", "Stats/Flags"),
+    ("stats", "Stats"),
 ]
 
 # Para estos tipos el apartado admite config JSON (items/flags).
@@ -44,6 +51,14 @@ CONFIG_LABELS = {
     "lista": "items",
     "opciones": "items",
     "stats_flags": "flags",
+    "stats": "stats",
+}
+
+# Campos editables por tipo de config.
+CONFIG_FIELDS = {
+    "items": ("id", "nombre", "descripcion"),
+    "flags": ("id", "nombre", "default"),
+    "stats": ("id", "nombre", "valor"),
 }
 
 
@@ -60,6 +75,7 @@ class MenuTab(BasePanel):
             self.get_abs_rect().x, self.get_abs_rect().y
         ))
         _load_menus()
+        _load_controles()
         self._selected_id = None
         self._menu = None
         self._apartado_idx = None
@@ -67,6 +83,8 @@ class MenuTab(BasePanel):
         self._config_key = None
         self._config_items = []
         self._item_idx = None
+        self._controles = get_controles()
+        self._control_idx = None
         self._status_text = ""
         self._status_error = False
         self._preview_mode = False
@@ -191,12 +209,22 @@ class MenuTab(BasePanel):
             ap_rect, item_list=ap_labels, manager=self._gui,
             default_selection=sel_label, container=container
         )
+        bx = ap_rect.right + 4
         self._ap_add_btn = pygame_gui.elements.UIButton(
-            pygame.Rect(ap_rect.right + 4, ap_rect.y, 54, 24), "+",
+            pygame.Rect(bx, ap_rect.y, 26, 24), "+",
             self._gui, container=container
         )
         self._ap_del_btn = pygame_gui.elements.UIButton(
-            pygame.Rect(ap_rect.right + 4, ap_rect.y + 28, 54, 24), "X",
+            pygame.Rect(bx, ap_rect.y + 28, 26, 24), "X",
+            self._gui, container=container
+        )
+        bx2 = ap_rect.right + 32
+        self._ap_up_btn = pygame_gui.elements.UIButton(
+            pygame.Rect(bx2, ap_rect.y, 26, 24), "↑",
+            self._gui, container=container
+        )
+        self._ap_down_btn = pygame_gui.elements.UIButton(
+            pygame.Rect(bx2, ap_rect.y + 28, 26, 24), "↓",
             self._gui, container=container
         )
         y = ap_rect.bottom + 8
@@ -238,6 +266,8 @@ class MenuTab(BasePanel):
             key = CONFIG_LABELS.get(tipo)
             if key:
                 y = self._build_config_editor(y, ew_avail, container, ap, key)
+            elif tipo == "controles":
+                y = self._build_controls_editor(y, ew_avail, container)
             else:
                 self._config_key = None
                 self._config_items = []
@@ -276,12 +306,22 @@ class MenuTab(BasePanel):
             ap_rect, item_list=ap_labels, manager=self._gui,
             default_selection=sel_label, container=container
         )
+        bx = ap_rect.right + 4
         self._ap_add_btn = pygame_gui.elements.UIButton(
-            pygame.Rect(ap_rect.right + 4, ap_rect.y, 54, 24), "+",
+            pygame.Rect(bx, ap_rect.y, 26, 24), "+",
             self._gui, container=container
         )
         self._ap_del_btn = pygame_gui.elements.UIButton(
-            pygame.Rect(ap_rect.right + 4, ap_rect.y + 28, 54, 24), "X",
+            pygame.Rect(bx, ap_rect.y + 28, 26, 24), "X",
+            self._gui, container=container
+        )
+        bx2 = ap_rect.right + 32
+        self._ap_up_btn = pygame_gui.elements.UIButton(
+            pygame.Rect(bx2, ap_rect.y, 26, 24), "↑",
+            self._gui, container=container
+        )
+        self._ap_down_btn = pygame_gui.elements.UIButton(
+            pygame.Rect(bx2, ap_rect.y + 28, 26, 24), "↓",
             self._gui, container=container
         )
 
@@ -325,7 +365,12 @@ class MenuTab(BasePanel):
         self._config_key = key
         self._config_items = items
 
-        lbl = i.t("menu.config_items") if key == "items" else i.t("menu.config_flags")
+        if key == "items":
+            lbl = i.t("menu.config_items")
+        elif key == "flags":
+            lbl = i.t("menu.config_flags")
+        else:
+            lbl = i.t("menu.config_stats")
         pygame_gui.elements.UILabel(
             pygame.Rect(PADDING, y, ew_avail, 18), lbl, self._gui, container=container
         )
@@ -362,8 +407,10 @@ class MenuTab(BasePanel):
             it = items[self._item_idx]
             if key == "items":
                 y = self._build_item_form(y, ew_avail, container, it)
-            else:
+            elif key == "flags":
                 y = self._build_flag_form(y, ew_avail, container, it)
+            else:
+                y = self._build_stat_form(y, ew_avail, container, it)
         return y
 
     def _build_item_form(self, y, ew_avail, container, it):
@@ -443,6 +490,82 @@ class MenuTab(BasePanel):
             y += 26
         return y
 
+    def _build_stat_form(self, y, ew_avail, container, it):
+        pygame_gui.elements.UILabel(
+            pygame.Rect(PADDING, y, ew_avail, 18), "Stat", self._gui, container=container
+        )
+        y += 20
+
+        self._it_inps = {}
+        for fname, flabel in (("id", "ID"), ("nombre", "Nombre"), ("valor", "Valor")):
+            pygame_gui.elements.UILabel(
+                pygame.Rect(PADDING, y, 75, 22), flabel, self._gui, container=container
+            )
+            self._it_inps[fname] = pygame_gui.elements.UITextEntryLine(
+                pygame.Rect(79, y, ew_avail - 79, 22),
+                initial_text=str(it.get(fname, "")),
+                manager=self._gui, container=container
+            )
+            y += 26
+        return y
+
+    def _build_controls_editor(self, y, ew_avail, container):
+        i = self.i18n
+        if self._controles is None:
+            self._controles = get_controles()
+        controls = self._controles
+        self._config_key = None
+        self._config_items = []
+        self._item_idx = None
+
+        pygame_gui.elements.UILabel(
+            pygame.Rect(PADDING, y, ew_avail, 18), i.t("menu.controls"),
+            self._gui, container=container
+        )
+        y += 22
+
+        cfg_h = 84
+        cfg_rect = pygame.Rect(PADDING, y, ew_avail - 60, cfg_h)
+        labels = []
+        for idx, c in enumerate(controls):
+            labels.append(f"{idx + 1}. {c.get('accion', '')}")
+        sel_label = None
+        if self._control_idx is not None and 0 <= self._control_idx < len(labels):
+            sel_label = labels[self._control_idx]
+        self._ctrl_list = pygame_gui.elements.UISelectionList(
+            cfg_rect, item_list=labels, manager=self._gui,
+            default_selection=sel_label, container=container
+        )
+        self._ctrl_add_btn = pygame_gui.elements.UIButton(
+            pygame.Rect(cfg_rect.right + 4, cfg_rect.y, 54, 24), "+",
+            self._gui, container=container
+        )
+        self._ctrl_del_btn = pygame_gui.elements.UIButton(
+            pygame.Rect(cfg_rect.right + 4, cfg_rect.y + 28, 54, 24), "X",
+            self._gui, container=container
+        )
+        self._ctrl_dup_btn = pygame_gui.elements.UIButton(
+            pygame.Rect(cfg_rect.right + 4, cfg_rect.y + 56, 54, 24), "Dup",
+            self._gui, container=container
+        )
+        y = cfg_rect.bottom + 8
+
+        if self._control_idx is not None and 0 <= self._control_idx < len(controls):
+            c = controls[self._control_idx]
+            self._ctrl_inps = {}
+            for fname, flabel in (("accion", i.t("menu.control_accion")),
+                                  ("tecla", i.t("menu.control_tecla"))):
+                pygame_gui.elements.UILabel(
+                    pygame.Rect(PADDING, y, 75, 22), flabel, self._gui, container=container
+                )
+                self._ctrl_inps[fname] = pygame_gui.elements.UITextEntryLine(
+                    pygame.Rect(79, y, ew_avail - 79, 22),
+                    initial_text=str(c.get(fname, "")),
+                    manager=self._gui, container=container
+                )
+                y += 26
+        return y
+
     # ── Persistencia ─────────────────────────────────────────
 
     def _commit_current(self):
@@ -464,6 +587,8 @@ class MenuTab(BasePanel):
                     ap["tipo"] = raw.split("|")[0]
             if self._config_key:
                 self._commit_config(ap)
+        if self._controles is not None:
+            self._commit_controles()
 
     @staticmethod
     def _sel_option(widget):
@@ -472,18 +597,18 @@ class MenuTab(BasePanel):
         return opt[0] if isinstance(opt, tuple) else opt
 
     def _commit_config(self, ap):
-        """Vuelca el formulario de items/flags al apartado en memoria."""
+        """Vuelca el formulario de items/flags/stats al apartado en memoria."""
         key = self._config_key
         items = self._config_items
         if self._item_idx is not None and 0 <= self._item_idx < len(items):
             it = items[self._item_idx]
             inps = getattr(self, "_it_inps", None)
             if inps:
+                for fname in CONFIG_FIELDS.get(key, ("id", "nombre")):
+                    inp = inps.get(fname)
+                    if inp:
+                        it[fname] = inp.get_text().strip()
                 if key == "items":
-                    for fname in ("id", "nombre", "descripcion"):
-                        inp = inps.get(fname)
-                        if inp:
-                            it[fname] = inp.get_text().strip()
                     acc_dd = getattr(self, "_it_accion_dd", None)
                     if acc_dd:
                         acc_tipo = self._sel_option(acc_dd).split("|")[0]
@@ -510,12 +635,37 @@ class MenuTab(BasePanel):
                                 else:
                                     params[pname] = w.get_text().strip()
                             it["accion"] = {"tipo": acc_tipo, "params": params}
-                else:
-                    for fname in ("id", "nombre", "default"):
-                        inp = inps.get(fname)
-                        if inp:
-                            it[fname] = inp.get_text().strip()
         ap[key] = items
+
+    def _commit_controles(self):
+        """Vuelca el formulario de controles al binding seleccionado (en memoria)."""
+        if self._controles is None or self._control_idx is None:
+            return
+        if not (0 <= self._control_idx < len(self._controles)):
+            return
+        c = self._controles[self._control_idx]
+        inps = getattr(self, "_ctrl_inps", None)
+        if not inps:
+            return
+        for fname in ("accion", "tecla"):
+            inp = inps.get(fname)
+            if inp:
+                c[fname] = inp.get_text().strip()
+
+    def _save_controles(self):
+        self._commit_controles()
+        if self._controles is None:
+            return True
+        bloq, adv = validar_controles(self._controles)
+        if bloq:
+            self._set_status("⚠ " + " · ".join(bloq), error=True)
+            return False
+        set_controles(self._controles)
+        if adv:
+            self._set_status("⚠ " + " · ".join(adv), error=False)
+        else:
+            self._set_status("✓ Guardado", error=False)
+        return True
 
     def _save_menu(self):
         self._commit_current()
@@ -525,11 +675,20 @@ class MenuTab(BasePanel):
                 self._set_status("⚠ " + " · ".join(bloq), error=True)
                 return False
             set_menu(self._selected_id, self._menu)
+        if self._controles is not None:
+            cbloq, _cadv = validar_controles(self._controles)
+            if cbloq:
+                self._set_status("⚠ " + " · ".join(cbloq), error=True)
+                return False
+            set_controles(self._controles)
+        if self._selected_id and self._menu is not None:
             if adv:
                 self._set_status("⚠ " + " · ".join(adv), error=False)
             else:
                 self._set_status("✓ Guardado", error=False)
-            return True
+        else:
+            self._save_controles()
+        return True
 
     def _set_status(self, text, error=False):
         self._status_text = text
@@ -552,13 +711,16 @@ class MenuTab(BasePanel):
 
     def _on_new(self):
         self._save_menu()
+        tpl = self._prompt_template()
+        if tpl is None:
+            return
         base = "menu_nuevo"
         mid = base
         n = 1
         while menu_exists(mid):
             mid = f"{base}_{n}"
             n += 1
-        create_menu(mid)
+        create_menu(mid, plantilla=tpl)
         self._select_menu(mid)
 
     def _on_clone(self):
@@ -601,6 +763,22 @@ class MenuTab(BasePanel):
         self._selected_id = new_id
         self._build_ui()
 
+    def _on_ap_move(self, direccion):
+        if not self._selected_id or self._menu is None:
+            return
+        if self._apartado_idx is None:
+            return
+        self._commit_current()
+        apartados = self._menu.get("apartados", [])
+        idx = self._apartado_idx
+        nuevo = idx + direccion
+        if not (0 <= idx < len(apartados)) or not (0 <= nuevo < len(apartados)):
+            return
+        apartados[idx], apartados[nuevo] = apartados[nuevo], apartados[idx]
+        self._apartado_idx = nuevo
+        self._save_menu()
+        self._build_ui()
+
     def _on_add_apartado(self):
         if not self._selected_id or self._menu is None:
             return
@@ -641,9 +819,13 @@ class MenuTab(BasePanel):
             self._config_items.append({
                 "id": f"item_{n}", "nombre": f"Item {n}", "descripcion": "",
             })
-        else:
+        elif self._config_key == "flags":
             self._config_items.append({
                 "id": f"flag_{n}", "nombre": f"Flag {n}", "default": "0",
+            })
+        else:
+            self._config_items.append({
+                "id": f"stat_{n}", "nombre": f"Stat {n}", "valor": "",
             })
         self._item_idx = len(self._config_items) - 1
         self._build_ui()
@@ -678,6 +860,99 @@ class MenuTab(BasePanel):
             self._item_idx = len(items) - 1
             self._build_ui()
             self._save_menu()
+
+    # ── Controles ────────────────────────────────────────────
+
+    def _on_add_control(self):
+        if self._controles is None:
+            self._controles = get_controles()
+        self._commit_controles()
+        n = len(self._controles) + 1
+        self._controles.append({"accion": f"Acción {n}", "tecla": ""})
+        self._control_idx = len(self._controles) - 1
+        self._build_ui()
+        self._save_controles()
+
+    def _on_del_control(self):
+        if self._controles is None or self._control_idx is None:
+            return
+        self._commit_controles()
+        controles = self._controles
+        if 0 <= self._control_idx < len(controles):
+            del controles[self._control_idx]
+        self._control_idx = max(0, min(self._control_idx - 1, len(controles) - 1))
+        if not controles:
+            self._control_idx = None
+        self._build_ui()
+        self._save_controles()
+
+    def _on_dup_control(self):
+        if self._controles is None or self._control_idx is None:
+            return
+        self._commit_controles()
+        controles = self._controles
+        if 0 <= self._control_idx < len(controles):
+            dup = copy.deepcopy(controles[self._control_idx])
+            dup["accion"] = (dup.get("accion", "") or "Acción") + "_copia"
+            controles.append(dup)
+            self._control_idx = len(controles) - 1
+            self._build_ui()
+            self._save_controles()
+
+    def _prompt_template(self):
+        i = self.i18n
+        font = i.fuente(14) if i else pygame.font.SysFont("Arial", 14)
+        font_b = i.fuente(14, bold=True) if i else pygame.font.SysFont("Arial", 14, bold=True)
+        screen = pygame.display.get_surface()
+        W, H = screen.get_width(), screen.get_height()
+        dw, dh = 460, 220
+        dx, dy = (W - dw) // 2, (H - dh) // 2
+        tpls = [
+            ("vacio", i.t("menu.tpl_vacio")),
+            ("inventario", i.t("menu.tpl_inventario")),
+            ("opciones", i.t("menu.tpl_opciones")),
+            ("relaciones", i.t("menu.tpl_relaciones")),
+        ]
+        bw, bh, gap = 200, 34, 12
+        x0 = dx + (dw - (bw * 2 + gap)) // 2
+        y0 = dy + 60
+        btn_rects = []
+        for n, (key, label) in enumerate(tpls):
+            col = n % 2
+            row = n // 2
+            btn_rects.append(
+                (pygame.Rect(x0 + col * (bw + gap), y0 + row * (bh + 10), bw, bh), key, label)
+            )
+        clock = pygame.time.Clock()
+        result = None
+        done = False
+        bg = pygame.Surface((W, H), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 180))
+        while not done:
+            clock.tick(30)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return None
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    done = True
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    for rect, key, _label in btn_rects:
+                        if rect.collidepoint(event.pos):
+                            result = key
+                            done = True
+                            break
+            screen.blit(bg, (0, 0))
+            pygame.draw.rect(screen, (45, 50, 58), (dx, dy, dw, dh))
+            pygame.draw.rect(screen, (70, 80, 95), (dx, dy, dw, dh), 2)
+            title = font_b.render(i.t("menu.template_title"), True, (220, 190, 120))
+            screen.blit(title, (dx + (dw - title.get_width()) // 2, dy + 16))
+            for rect, _key, label in btn_rects:
+                pygame.draw.rect(screen, (70, 78, 90), rect)
+                pygame.draw.rect(screen, (110, 120, 135), rect, 1)
+                txt = font.render(label, True, (210, 210, 210))
+                screen.blit(txt, (rect.centerx - txt.get_width() // 2, rect.centery - txt.get_height() // 2))
+            pygame.display.flip()
+        return result
 
     def _prompt_new_id(self, current_id):
         i = self.i18n
@@ -791,6 +1066,12 @@ class MenuTab(BasePanel):
             if el == getattr(self, "_ap_del_btn", None):
                 self._on_del_apartado()
                 return True
+            if el == getattr(self, "_ap_up_btn", None):
+                self._on_ap_move(-1)
+                return True
+            if el == getattr(self, "_ap_down_btn", None):
+                self._on_ap_move(1)
+                return True
             if el == getattr(self, "_cfg_add_btn", None):
                 self._on_add_item()
                 return True
@@ -799,6 +1080,15 @@ class MenuTab(BasePanel):
                 return True
             if el == getattr(self, "_cfg_dup_btn", None):
                 self._on_dup_item()
+                return True
+            if el == getattr(self, "_ctrl_add_btn", None):
+                self._on_add_control()
+                return True
+            if el == getattr(self, "_ctrl_del_btn", None):
+                self._on_del_control()
+                return True
+            if el == getattr(self, "_ctrl_dup_btn", None):
+                self._on_dup_control()
                 return True
             return True
         elif e.type == pygame_gui.UI_SELECTION_LIST_NEW_SELECTION:
@@ -829,6 +1119,18 @@ class MenuTab(BasePanel):
                     idx = 0
                 self._item_idx = idx
                 self._save_menu()
+                self._build_ui()
+                return True
+            if hasattr(self, '_ctrl_list') and e.ui_element == self._ctrl_list:
+                self._commit_controles()
+                text = e.text
+                idx = 0
+                try:
+                    idx = int(text.split(".")[0]) - 1
+                except (ValueError, AttributeError):
+                    idx = 0
+                self._control_idx = idx
+                self._save_controles()
                 self._build_ui()
                 return True
         elif e.type == pygame_gui.UI_DROP_DOWN_MENU_CHANGED:
