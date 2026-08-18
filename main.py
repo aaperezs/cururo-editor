@@ -852,7 +852,7 @@ exe = EXE(
             mb.add_section(mundo.label, mundo.items)
 
         contenido_items = []
-        for pid in ("elements", "items", "abilities", "bosses", "behaviors", "events", "dialogos", "menus"):
+        for pid in ("elements", "items", "abilities", "bosses", "behaviors", "events", "dialogos", "menus", "monedas"):
             if pid in available:
                 label = {
                     "elements": "Elementos",
@@ -863,6 +863,7 @@ exe = EXE(
                     "events": "Eventos",
                     "dialogos": "Dialogos",
                     "menus": "Menús",
+                    "monedas": "Monedas",
                 }[pid]
                 contenido_items.append(
                     MenuItem(label, action=lambda pid=pid: self._open_panel(pid))
@@ -976,8 +977,10 @@ exe = EXE(
             y = win.get("y")
             if win.get("maximized"):
                 try:
-                    import pygame._sdl2 as _sdl2
-                    _sdl2.Window.from_display_module().maximize()
+                    import ctypes
+                    hwnd = pygame.display.get_wm_info().get("window")
+                    if hwnd:
+                        ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
                 except Exception:
                     _restore_fallback_maximize(x, y, self.ancho, self.alto)
             elif x is not None and y is not None:

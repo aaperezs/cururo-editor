@@ -1,3 +1,8 @@
+import os
+import shutil
+import tkinter as tkinter
+import tkinter.filedialog as fd
+
 import pygame
 
 from editor.panels.base_panel import BasePanel
@@ -5,6 +10,7 @@ from editor.widgets.button import Button
 from editor.widgets.label import Label
 from editor.widgets.panel import Panel
 from editor.widgets.text_input import TextInput
+from editor.project import get_current_project
 from editor.monedas_data import (
     _load_monedas,
     get_monedas,
@@ -69,7 +75,9 @@ class MonedasTab(BasePanel):
         self._id_input = None
         self._label_input = None
         self._valor_input = None
-        self._icono_input = None
+        self._icono_value = None
+        self._icono_btn = None
+        self._icono_clear_btn = None
         self._principal_btn = None
         for i in range(3):
             setattr(self, f"_color_{i}_input", None)
@@ -113,9 +121,14 @@ class MonedasTab(BasePanel):
         lbl = Label(PADDING, y, 110, 22, self.i18n.t("moneda.icono") + ":", font_size=12,
                     color=(180, 185, 195))
         lbl.parent = ep; ep.children.append(lbl)
-        self._icono_input = TextInput(120, y, 80, 22, default=moneda.get("icono", ""),
-                                      max_chars=4, numeric_only=False)
-        self._icono_input.parent = ep; ep.children.append(self._icono_input)
+        self._icono_value = Label(120, y, 150, 22, "", font_size=12, color=(200, 210, 220))
+        self._icono_value.parent = ep; ep.children.append(self._icono_value)
+        self._icono_btn = Button(274, y, 52, 22, "...", callback=self._on_pick_icono)
+        self._icono_btn.parent = ep; ep.children.append(self._icono_btn)
+        self._icono_clear_btn = Button(330, y, 28, 22, "X", callback=self._on_clear_icono)
+        self._icono_clear_btn.parent = ep; ep.children.append(self._icono_clear_btn)
+        self._icono_preview_rect = pygame.Rect(362, y, 22, 22)
+        self._update_icono_label(moneda)
         y += 30
 
         lbl = Label(PADDING, y, 110, 22, self.i18n.t("moneda.color") + ":", font_size=12,
@@ -168,7 +181,6 @@ class MonedasTab(BasePanel):
             moneda["id"] = self._id_input.text.strip()
             moneda["label"] = self._label_input.text.strip()
             moneda["valor_inicial"] = int(self._valor_input.text or "0")
-            moneda["icono"] = self._icono_input.text.strip()
             try:
                 moneda["color"] = [
                     int(getattr(self, "_color_0_input").text or "0"),
@@ -185,6 +197,75 @@ class MonedasTab(BasePanel):
             else:
                 moneda["principal"] = False
         self._eid_label.text = f"ID: {moneda.get('id', '')}"
+
+    # ── Ícono (sprite desde explorador de Windows) ──────────
+
+    def _update_icono_label(self, moneda=None):
+        if moneda is None and self._selected_idx is not None and 0 <= self._selected_idx < len(self._monedas):
+            moneda = self._monedas[self._selected_idx]
+        icono = (moneda or {}).get("icono", "")
+        if getattr(self, "_icono_value", None):
+            self._icono_value.text = icono or self.i18n.t("moneda.icono_ninguno")
+            self._icono_value.color = (200, 210, 220) if icono else (130, 140, 150)
+
+    def _on_pick_icono(self):
+        self._commit_current()
+        if self._selected_idx is None:
+            return
+        moneda = self._monedas[self._selected_idx]
+        p = get_current_project()
+        initial = p.assets_path() if p else None
+        root = tkinter.Tk()
+        root.withdraw()
+        try:
+            fpath = fd.askopenfilename(
+                title=self.i18n.t("moneda.icono_dialog"),
+                initialdir=initial,
+                filetypes=[("PNG", "*.png")])
+        finally:
+            root.destroy()
+        if not fpath:
+            return
+        sid = self._icono_asset_id(fpath)
+        if not sid:
+            self._set_status("! " + self.i18n.t("moneda.icono_invalido"), error=True)
+            return
+        moneda["icono"] = sid
+        self._update_icono_label(moneda)
+
+    def _on_clear_icono(self):
+        self._commit_current()
+        if self._selected_idx is None:
+            return
+        self._monedas[self._selected_idx]["icono"] = ""
+        self._update_icono_label()
+
+    def _icono_asset_id(self, fpath):
+        """Devuelve el sprite_id (stem) del PNG elegido, copiándolo a assets/ si viene de fuera."""
+        p = get_current_project()
+        if not p or not os.path.exists(fpath):
+            return None
+        ext = os.path.splitext(fpath)[1].lower()
+        if ext != ".png":
+            return None
+        assets_dir = os.path.normpath(p.assets_path())
+        norm = os.path.normpath(os.path.abspath(fpath))
+        stem = os.path.splitext(os.path.basename(fpath))[0]
+        if norm.startswith(assets_dir + os.sep):
+            return stem
+        os.makedirs(assets_dir, exist_ok=True)
+        dest = os.path.join(assets_dir, f"{stem}.png")
+        if os.path.normpath(dest) != norm and os.path.exists(dest):
+            base, n = stem, 1
+            while os.path.exists(os.path.join(assets_dir, f"{base}_{n}.png")):
+                n += 1
+            dest = os.path.join(assets_dir, f"{base}_{n}.png")
+            stem = f"{base}_{n}"
+        try:
+            shutil.copy2(fpath, dest)
+        except (IOError, OSError):
+            return None
+        return stem
 
     def _set_status(self, text, error=False):
         self._status_text = text
@@ -354,3 +435,24 @@ class MonedasTab(BasePanel):
             swatch = pygame.Rect(ep.rect.x + 120, ep.rect.y + self._color_swatch.y, 28, 28)
             pygame.draw.rect(surface, (r, g, b), swatch)
             pygame.draw.rect(surface, (80, 90, 105), swatch, 1)
+            # Preview del ícono (sprite)
+            pr = getattr(self, "_icono_preview_rect", None)
+            if pr:
+                icono = self._monedas[self._selected_idx].get("icono", "")
+                p = get_current_project()
+                fpath = p.assets_path(f"{icono}.png") if icono and p else None
+                thumb = None
+                if fpath and os.path.exists(fpath):
+                    try:
+                        thumb = pygame.image.load(fpath).convert_alpha()
+                    except Exception:
+                        thumb = None
+                prect = pygame.Rect(ep.rect.x + pr.x, ep.rect.y + pr.y, pr.w, pr.h)
+                pygame.draw.rect(surface, (45, 50, 60), prect)
+                pygame.draw.rect(surface, (80, 90, 105), prect, 1)
+                if thumb:
+                    escala = min(prect.w / thumb.get_width(), prect.h / thumb.get_height())
+                    tw = max(1, int(thumb.get_width() * escala))
+                    th = max(1, int(thumb.get_height() * escala))
+                    t = pygame.transform.scale(thumb, (tw, th))
+                    surface.blit(t, (prect.x + (prect.w - tw) // 2, prect.y + (prect.h - th) // 2))
