@@ -16,14 +16,25 @@ from editor.actions_data import (
 )
 from editor.menu_data import (
     _load_menus,
-    create_menu,
-    delete_menu,
     get_all_menus,
     get_menu,
-    menu_exists,
-    rename_menu,
     set_menu,
     validar_menu,
+)
+from editor.menu_crud import (
+    create_new_menu,
+    clone_menu,
+    delete_menu_by_id,
+    rename_menu_by_id,
+    move_apartado,
+    add_apartado,
+    delete_apartado,
+    add_config_item,
+    delete_config_item,
+    duplicate_config_item,
+    add_control,
+    delete_control,
+    duplicate_control,
 )
 from editor.controls_data import (
     _load_controles,
@@ -723,35 +734,22 @@ class MenuTab(BasePanel):
         tpl = self._prompt_template()
         if tpl is None:
             return
-        base = "menu_nuevo"
-        mid = base
-        n = 1
-        while menu_exists(mid):
-            mid = f"{base}_{n}"
-            n += 1
-        create_menu(mid, plantilla=tpl)
-        self._select_menu(mid)
+        mid = create_new_menu(tpl)
+        if mid:
+            self._select_menu(mid)
 
     def _on_clone(self):
         if not self._selected_id:
             return
         self._save_menu()
-        data = get_menu(self._selected_id)
-        if not data:
-            return
-        base = self._selected_id + "_copia"
-        mid = base
-        n = 1
-        while menu_exists(mid):
-            mid = f"{base}_{n}"
-            n += 1
-        set_menu(mid, data)
-        self._select_menu(mid)
+        mid = clone_menu(self._selected_id)
+        if mid:
+            self._select_menu(mid)
 
     def _on_delete(self):
         if not self._selected_id:
             return
-        delete_menu(self._selected_id)
+        delete_menu_by_id(self._selected_id)
         self._selected_id = None
         self._menu = None
         self._apartado_idx = None
@@ -763,9 +761,7 @@ class MenuTab(BasePanel):
         new_id = self._prompt_new_id(self._selected_id)
         if not new_id or new_id == self._selected_id:
             return
-        if menu_exists(new_id):
-            return
-        if not rename_menu(self._selected_id, new_id):
+        if not rename_menu_by_id(self._selected_id, new_id):
             return
         if self._menu is not None:
             self._menu["id"] = new_id
@@ -778,13 +774,9 @@ class MenuTab(BasePanel):
         if self._apartado_idx is None:
             return
         self._commit_current()
-        apartados = self._menu.get("apartados", [])
-        idx = self._apartado_idx
-        nuevo = idx + direccion
-        if not (0 <= idx < len(apartados)) or not (0 <= nuevo < len(apartados)):
-            return
-        apartados[idx], apartados[nuevo] = apartados[nuevo], apartados[idx]
-        self._apartado_idx = nuevo
+        new_idx = move_apartado(self._menu, self._apartado_idx, direccion)
+        if new_idx is not None:
+            self._apartado_idx = new_idx
         self._persist()
         self._build_ui()
 
@@ -792,14 +784,7 @@ class MenuTab(BasePanel):
         if not self._selected_id or self._menu is None:
             return
         self._commit_current()
-        apartados = self._menu.setdefault("apartados", [])
-        n = len(apartados) + 1
-        apartados.append({
-            "id": f"apartado_{n}",
-            "nombre": f"Apartado {n}",
-            "tipo": "lista",
-        })
-        self._apartado_idx = len(apartados) - 1
+        self._apartado_idx = add_apartado(self._menu)
         self._persist()
         self._build_ui()
 
@@ -808,12 +793,7 @@ class MenuTab(BasePanel):
             return
         if self._apartado_idx is None:
             return
-        apartados = self._menu.get("apartados", [])
-        if 0 <= self._apartado_idx < len(apartados):
-            del apartados[self._apartado_idx]
-        self._apartado_idx = max(0, min(self._apartado_idx - 1, len(apartados) - 1))
-        if not apartados:
-            self._apartado_idx = None
+        self._apartado_idx = delete_apartado(self._menu, self._apartado_idx)
         self._persist()
         self._build_ui()
 
@@ -823,20 +803,7 @@ class MenuTab(BasePanel):
         if not self._config_key:
             return
         self._commit_current()
-        n = len(self._config_items) + 1
-        if self._config_key == "items":
-            self._config_items.append({
-                "id": f"item_{n}", "nombre": f"Item {n}", "descripcion": "",
-            })
-        elif self._config_key == "flags":
-            self._config_items.append({
-                "id": f"flag_{n}", "nombre": f"Flag {n}", "default": "0",
-            })
-        else:
-            self._config_items.append({
-                "id": f"stat_{n}", "nombre": f"Stat {n}", "valor": "",
-            })
-        self._item_idx = len(self._config_items) - 1
+        self._item_idx = add_config_item(self._config_items, self._config_key)
         self._build_ui()
         self._save_menu()
 
@@ -846,12 +813,7 @@ class MenuTab(BasePanel):
         if self._item_idx is None:
             return
         self._commit_current()
-        items = self._config_items
-        if 0 <= self._item_idx < len(items):
-            del items[self._item_idx]
-        self._item_idx = max(0, min(self._item_idx - 1, len(items) - 1))
-        if not items:
-            self._item_idx = None
+        self._item_idx = delete_config_item(self._config_items, self._item_idx)
         self._build_ui()
         self._save_menu()
 
@@ -861,12 +823,9 @@ class MenuTab(BasePanel):
         if self._item_idx is None:
             return
         self._commit_current()
-        items = self._config_items
-        if 0 <= self._item_idx < len(items):
-            dup = copy.deepcopy(items[self._item_idx])
-            dup["id"] = (dup.get("id", "") or "item") + "_copia"
-            items.append(dup)
-            self._item_idx = len(items) - 1
+        new_idx = duplicate_config_item(self._config_items, self._item_idx)
+        if new_idx is not None:
+            self._item_idx = new_idx
             self._build_ui()
             self._save_menu()
 
@@ -876,9 +835,7 @@ class MenuTab(BasePanel):
         if self._controles is None:
             self._controles = get_controles()
         self._commit_controles()
-        n = len(self._controles) + 1
-        self._controles.append({"accion": f"Acción {n}", "tecla": ""})
-        self._control_idx = len(self._controles) - 1
+        self._control_idx = add_control(self._controles)
         self._build_ui()
         self._save_controles()
 
@@ -886,12 +843,7 @@ class MenuTab(BasePanel):
         if self._controles is None or self._control_idx is None:
             return
         self._commit_controles()
-        controles = self._controles
-        if 0 <= self._control_idx < len(controles):
-            del controles[self._control_idx]
-        self._control_idx = max(0, min(self._control_idx - 1, len(controles) - 1))
-        if not controles:
-            self._control_idx = None
+        self._control_idx = delete_control(self._controles, self._control_idx)
         self._build_ui()
         self._save_controles()
 
@@ -899,12 +851,9 @@ class MenuTab(BasePanel):
         if self._controles is None or self._control_idx is None:
             return
         self._commit_controles()
-        controles = self._controles
-        if 0 <= self._control_idx < len(controles):
-            dup = copy.deepcopy(controles[self._control_idx])
-            dup["accion"] = (dup.get("accion", "") or "Acción") + "_copia"
-            controles.append(dup)
-            self._control_idx = len(controles) - 1
+        new_idx = duplicate_control(self._controles, self._control_idx)
+        if new_idx is not None:
+            self._control_idx = new_idx
             self._build_ui()
             self._save_controles()
 

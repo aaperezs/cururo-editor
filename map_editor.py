@@ -1,8 +1,6 @@
 import pygame
 import os
 import sys
-import json
-import copy
 import subprocess
 from editor.translation import I18n
 from editor.panels.base_panel import BasePanel
@@ -15,16 +13,28 @@ from editor.widgets.scrollable import ScrollableArea
 from editor.widgets.tab_bar import TabBar
 from editor.widgets.layer_panel import LayerPanel
 from editor.widgets.dialog import Dialog
-from editor.sprite_map import get_sprite_file, char_to_sprite_id
+from editor.sprite_map import get_sprite_file
 from editor.sprite_registry import get_sprite_registry
 from editor.elements import get_element, get_element_sprite_id, is_multi_tile_element
 from editor.map_tab import MapTab
 from editor.project import get_current_project
+from editor.tileset import Tileset, clear_cache as clear_tileset_cache
 from editor import workspace
-from levels.level_parser import LevelParser
-from levels.level_manager import RUTA_MAPAS
-from utils.sprite_manager import obtener as obtener_sprite
-from configs.constants import TAMANO_CELDA
+from editor.common.parser import parsear_mapa
+from editor.common.sprite_loader import obtener as obtener_sprite
+from editor.map_model import (
+    load_layer, save_layer, load_stacks, save_stacks,
+    load_multi_tiles, save_multi_tiles, load_meta, save_meta,
+    scan_spawn_from_grid,
+)
+from editor.map_viewport import MapViewport
+from editor.map_tools import MapTools
+
+
+
+def _maps_dir():
+    p = get_current_project()
+    return p.maps_path() if p else ""
 
 
 def _stacks_dir():
@@ -39,13 +49,15 @@ class MapEditorPanel(BasePanel):
 
         self._tabs = {}
         self._tab_order = []
-        self._zoom = 1
-        self._show_grid = True
-        self._paint_dragging = False
-        self._drag_button = 0
-        self._last_paint_pos = None
-        self._drag_source = None
+        self.viewport = MapViewport()
+        self.tools = MapTools(get_element_fn=get_element)
         self._build_ui()
+
+        p = get_current_project()
+        if p and p.tileset:
+            self._palette.set_mode("tileset")
+        else:
+            self._palette.set_mode("elements")
 
     @property
     def _current_tab(self):
@@ -103,12 +115,18 @@ class MapEditorPanel(BasePanel):
         self._resize_btn.parent = toolbar
         toolbar.children.append(self._resize_btn)
 
+        _ico_tileset = make_icon("grid", 18)
+        _tileset_text = "Tileset" if not _ico_tileset else ""
+        self._tileset_btn = Button(resize_x + 66, 4, 32, 28, text=_tileset_text, icon=_ico_tileset, callback=self._toggle_tileset_mode)
+        self._tileset_btn.parent = toolbar
+        toolbar.children.append(self._tileset_btn)
+
         # Tool selector buttons with icons
         _ico_sel = make_icon("select", 18)
         _ico_era = make_icon("eraser", 18)
         _ico_buc = make_icon("bucket", 18)
         _ico_drag = make_icon("drag", 18)
-        tx = resize_x + 66
+        tx = resize_x + 102  # After tileset button (66 + 36)
         self._tool_sel_btn = Button(tx, 4, 32, 28, icon=_ico_sel, callback=self._set_tool_select)
         self._tool_sel_btn.parent = toolbar
         toolbar.children.append(self._tool_sel_btn)
@@ -205,19 +223,14 @@ class MapEditorPanel(BasePanel):
             self._update_content_size()
 
     def _tile_size(self):
-        ts = int(TAMANO_CELDA * self._zoom)
-        return max(4, ts)
+        return self.viewport.tile_size
 
     def _update_content_size(self):
         tab = self._current_tab
         if not tab:
             self._scroll_area.set_content(0, 0)
             return
-        ts = self._tile_size()
-        # Use max dimensions across all layers
-        ancho = max((ls.ancho for ls in tab.layers.values()), default=0)
-        alto = max((ls.alto for ls in tab.layers.values()), default=0)
-        self._scroll_area.set_content(ancho * ts, alto * ts)
+        self.viewport.update_content_size(tab, self._scroll_area)
 
     def _get_multi_tile_dims(self, element_id):
         el = get_element(element_id)
@@ -227,56 +240,29 @@ class MapEditorPanel(BasePanel):
         return props.get("tile_rows", 1), props.get("tile_cols", 1)
 
     def _paint_multi_tile(self, tab, ls, gx, gy, element_id):
-        rows, cols = self._get_multi_tile_dims(element_id)
-        painted = []
-        for r in range(rows):
-            for c in range(cols):
-                cx, cy = gx + c, gy + r
-                if 0 <= cx < ls.ancho and 0 <= cy < ls.alto:
-                    ls.grid[(cx, cy)] = element_id
-                    painted.append((cx, cy))
-        if painted:
-            tab.multi_tiles[(gx, gy, tab.active_z)] = {"element_id": element_id}
-        return painted
+        from editor.map_model import paint_multi_tile
+        return paint_multi_tile(tab, ls, gx, gy, element_id, get_element)
 
     def _is_multi_tile_anchor(self, tab, gx, gy, z):
-        for (ax, ay, az), info in list(tab.multi_tiles.items()):
-            if az != z:
-                continue
-            el = get_element(info.get("element_id", ""))
-            props = el.get("properties", {}) if el else {}
-            rows = props.get("tile_rows", 1)
-            cols = props.get("tile_cols", 1)
-            if ax <= gx < ax + cols and ay <= gy < ay + rows:
-                return (ax, ay, az)
-        return None
+        from editor.map_model import is_multi_tile_anchor
+        return is_multi_tile_anchor(tab, gx, gy, z, get_element)
 
     def _erase_multi_tile(self, tab, ls, anchor_key):
-        ax, ay, az = anchor_key
-        info = tab.multi_tiles.get(anchor_key, {})
-        el = get_element(info.get("element_id", ""))
-        props = el.get("properties", {}) if el else {}
-        rows = props.get("tile_rows", 1)
-        cols = props.get("tile_cols", 1)
-        for r in range(rows):
-            for c in range(cols):
-                cx, cy = ax + c, ay + r
-                self._erase_tile(tab, ls, cx, cy)
-        tab.multi_tiles.pop(anchor_key, None)
+        from editor.map_model import erase_multi_tile
+        erase_multi_tile(tab, ls, anchor_key, get_element)
 
     def _zoom_in(self):
-        old_zoom = self._zoom
-        self._zoom = min(4, self._zoom + 0.25)
-        self._zoom_label.text = f"{int(self._zoom * 100)}%"
+        self.viewport.zoom_in()
+        self._zoom_label.text = self.viewport.zoom_label()
         self._update_content_size()
 
     def _zoom_out(self):
-        self._zoom = max(0.25, self._zoom - 0.25)
-        self._zoom_label.text = f"{int(self._zoom * 100)}%"
+        self.viewport.zoom_out()
+        self._zoom_label.text = self.viewport.zoom_label()
         self._update_content_size()
 
     def _toggle_grid(self):
-        self._show_grid = not self._show_grid
+        self.viewport.show_grid = not self.viewport.show_grid
 
     def _launch_game(self):
         """Lanza el runtime del proyecto actual en un proceso separado"""
@@ -354,8 +340,8 @@ class MapEditorPanel(BasePanel):
             self._tab_order.append(uid)
             self._map_tab_bar.add_tab(uid, tab.label(), dirty=False, closeable=True)
             self._map_tab_bar.set_active_by_id(uid)
-            self._zoom = 1
-            self._zoom_label.text = "100%"
+            self.viewport.zoom = 1.0
+            self._zoom_label.text = self.viewport.zoom_label()
             self._layer_panel.sync_layers(tab.layer_order)
             self._sync_ui()
             self._update_content_size()
@@ -424,7 +410,7 @@ class MapEditorPanel(BasePanel):
         root = tk.Tk()
         root.withdraw()
         path = filedialog.askopenfilename(
-            initialdir=RUTA_MAPAS,
+            initialdir=_maps_dir(),
             title=self.i18n.t("map.open"),
             filetypes=[("Map files", "*.txt *.json"), ("Text maps", "*.txt"), ("JSON maps", "*.json")]
         )
@@ -442,36 +428,17 @@ class MapEditorPanel(BasePanel):
 
         tab = MapTab(map_id=map_id)
 
-        def _layer_suffix(z):
-            return "" if z == 0 else f"_z{z}"
-
         def _try_load_layer(z):
-            suffix = _layer_suffix(z)
-            path_json = os.path.join(RUTA_MAPAS, f"{map_id}{suffix}.json")
-            path_txt = os.path.join(RUTA_MAPAS, f"{map_id}{suffix}.txt")
-            if os.path.exists(path_json):
-                with open(path_json, "r", encoding="utf-8") as f:
-                    text = f.read()
-                grid, ancho, alto = self._json_to_grid(text)
-                if z not in tab.layers:
-                    tab.layers[z] = tab.layers[0].__class__()
-                tab.layers[z].grid = grid
-                tab.layers[z].ancho = ancho
-                tab.layers[z].alto = alto
-                return True
-            elif os.path.exists(path_txt):
-                with open(path_txt, "r", encoding="utf-8") as f:
-                    text = f.read()
-                parsed = LevelParser.parsear_mapa(text)
-                ancho = parsed["ancho"] // TAMANO_CELDA
-                alto = parsed["alto"] // TAMANO_CELDA
-                if z not in tab.layers:
-                    tab.layers[z] = tab.layers[0].__class__()
-                tab.layers[z].grid = self._text_to_grid(text)
-                tab.layers[z].ancho = ancho
-                tab.layers[z].alto = alto
-                return True
-            return False
+            result = load_layer(map_id, z, _maps_dir())
+            if result is None:
+                return False
+            grid, ancho, alto = result
+            if z not in tab.layers:
+                tab.layers[z] = tab.layers[0].__class__()
+            tab.layers[z].grid = grid
+            tab.layers[z].ancho = ancho
+            tab.layers[z].alto = alto
+            return True
 
         # Load Z=0 first to get base dimensions
         if _try_load_layer(0):
@@ -490,80 +457,30 @@ class MapEditorPanel(BasePanel):
                 tab.layers[z].opacity = 100
 
         # Load stacks
-        stack_path = os.path.join(_stacks_dir(), f"{map_id}_stacks.json")
-        if os.path.exists(stack_path):
-            try:
-                with open(stack_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                tab.stacks = {}
-                for s in data.get("stacks", []):
-                    pos = tuple(s["pos"])
-                    z = s.get("z", s.get("z_layer", 0))
-                    eventos = s.get("eventos", [])
-                    if not eventos and "capas" in s:
-                        capas = s.get("capas", [])
-                        if capas:
-                            for capa in capas:
-                                for ev in capa.get("eventos", []):
-                                    old_tipo = ev.get("tipo", "")
-                                    new_trigger = "contact" if old_tipo == "on_destroy" else \
-                                                  "interact" if old_tipo == "on_interact" else "contact"
-                                    eventos.append({
-                                        "trigger": new_trigger,
-                                        "condiciones": [],
-                                        "acciones": [{"tipo": ev.get("accion", "show_message"),
-                                                      "params": dict(ev.get("parametros", {}))}]
-                                    })
-                    s["eventos"] = eventos
-                    key = (pos[0], pos[1], z)
-                    tab.stacks[key] = s
-            except (json.JSONDecodeError, KeyError):
-                tab.stacks = {}
+        tab.stacks = load_stacks(map_id, _stacks_dir())
 
         # Load multi_tiles
-        mt_path = os.path.join(RUTA_MAPAS, f"{map_id}_multitiles.json")
-        if os.path.exists(mt_path):
-            try:
-                with open(mt_path, "r", encoding="utf-8") as f:
-                    raw = json.load(f)
-                tab.multi_tiles = {}
-                for key, info in raw.items():
-                    parts = key.split(",")
-                    gx, gy, z = int(parts[0]), int(parts[1]), int(parts[2])
-                    tab.multi_tiles[(gx, gy, z)] = info
-            except (json.JSONDecodeError, KeyError):
-                tab.multi_tiles = {}
+        tab.multi_tiles = load_multi_tiles(map_id, _maps_dir())
 
         # Load meta (spawn point, etc.)
-        meta_path = os.path.join(RUTA_MAPAS, f"{map_id}_meta.json")
-        if os.path.exists(meta_path):
-            try:
-                with open(meta_path, "r", encoding="utf-8") as f:
-                    meta = json.load(f)
-                spawn = meta.get("spawn")
-                if spawn:
-                    tab.spawn_pos = tuple(spawn["pos"])
-                    tab.spawn_z = spawn.get("z", 0)
-            except (json.JSONDecodeError, KeyError):
-                pass
+        meta = load_meta(map_id, _maps_dir())
+        if meta:
+            tab.spawn_pos = meta.get("spawn_pos")
+            tab.spawn_z = meta.get("spawn_z", 0)
 
         # If no spawn from meta, scan grid for 'inicio' sprite (legacy maps)
         if not tab.spawn_pos:
-            for z, ls in tab.layers.items():
-                for (gx, gy), sid in ls.grid.items():
-                    if sid == "inicio":
-                        tab.spawn_pos = (gx, gy)
-                        tab.spawn_z = z
-                        break
-                if tab.spawn_pos:
-                    break
+            spawn_pos, spawn_z = scan_spawn_from_grid(tab)
+            if spawn_pos:
+                tab.spawn_pos = spawn_pos
+                tab.spawn_z = spawn_z
 
         self._tabs[map_id] = tab
         self._tab_order.append(map_id)
         self._map_tab_bar.add_tab(map_id, tab.label(), dirty=False, closeable=True)
         self._map_tab_bar.set_active_by_id(map_id)
-        self._zoom = 1
-        self._zoom_label.text = "100%"
+        self.viewport.zoom = 1.0
+        self._zoom_label.text = self.viewport.zoom_label()
         self._layer_panel.sync_layers(tab.layer_order)
         self._sync_ui()
         self._update_content_size()
@@ -581,7 +498,7 @@ class MapEditorPanel(BasePanel):
                 "active_z": tab.active_z,
                 "spawn_pos": list(tab.spawn_pos) if tab.spawn_pos else None,
                 "spawn_z": tab.spawn_z,
-                "zoom": getattr(self, "_zoom", 1),
+                "zoom": self.viewport.zoom,
                 "scroll_x": getattr(self._scroll_area, "scroll_x", 0),
                 "scroll_y": getattr(self._scroll_area, "scroll_y", 0),
             }
@@ -608,7 +525,7 @@ class MapEditorPanel(BasePanel):
             self._map_tab_bar.set_active_by_id(active)
             # Restore zoom/scroll for active tab
             tdata = maps_data.get("tabs", {}).get(active, {})
-            self._zoom = tdata.get("zoom", 1)
+            self.viewport.zoom = tdata.get("zoom", 1)
             self._scroll_area.scroll_x = tdata.get("scroll_x", 0)
             self._scroll_area.scroll_y = tdata.get("scroll_y", 0)
         self._sync_ui()
@@ -647,44 +564,13 @@ class MapEditorPanel(BasePanel):
                 evs = data.get("eventos", []) if data else []
                 self._event_widget.set_eventos(evs)
 
-    def _get_map_path(self, map_id, z, ext=".json"):
-        suffix = "" if z == 0 else f"_z{z}"
-        return os.path.join(RUTA_MAPAS, f"{map_id}{suffix}{ext}")
-
-    def _get_stack_path(self, map_id):
-        return os.path.join(_stacks_dir(), f"{map_id}_stacks.json")
-
-    def _text_to_grid(self, text):
-        lines = [l.rstrip() for l in text.split("\n") if l.strip() and not l.startswith("# ")]
-        grid = {}
-        for y, line in enumerate(lines):
-            for x, ch in enumerate(line):
-                sid = char_to_sprite_id(ch)
-                if sid:
-                    grid[(x, y)] = sid
-        return grid
-
     def _grid_to_json(self, grid, ancho, alto):
-        raw = {}
-        for (gx, gy), sprite_id in grid.items():
-            raw[f"{gx},{gy}"] = sprite_id
-        return json.dumps({
-            "version": 2,
-            "ancho": ancho,
-            "alto": alto,
-            "grid": raw,
-        }, indent=2, ensure_ascii=False)
+        from editor.map_model import grid_to_json
+        return grid_to_json(grid, ancho, alto)
 
     def _json_to_grid(self, text):
-        data = json.loads(text)
-        raw = data.get("grid", {})
-        grid = {}
-        for key, sprite_id in raw.items():
-            if "," in key:
-                parts = key.split(",")
-                gx, gy = int(parts[0]), int(parts[1])
-                grid[(gx, gy)] = sprite_id
-        return grid, data.get("ancho", 0), data.get("alto", 0)
+        from editor.map_model import json_to_grid
+        return json_to_grid(text)
 
     def _save_map(self):
         tab = self._current_tab
@@ -698,7 +584,7 @@ class MapEditorPanel(BasePanel):
             root = tk.Tk()
             root.withdraw()
             path = filedialog.asksaveasfilename(
-                initialdir=RUTA_MAPAS,
+                initialdir=_maps_dir(),
                 title=self.i18n.t("app.save_as"),
                 defaultextension=".json",
                 filetypes=[("JSON maps", "*.json"), ("Text maps", "*.txt")]
@@ -728,75 +614,27 @@ class MapEditorPanel(BasePanel):
             else:
                 tab.stacks[key] = {"pos": list(sel), "z": z, "eventos": self._event_widget.get_eventos()}
 
-        # Save each layer as JSON v2
+        # Save each layer
         for z, ls in tab.layers.items():
-            path = self._get_map_path(map_id, z, ".json")
-            if not ls.grid:
-                if os.path.exists(path):
-                    os.remove(path)
-                continue
-            text = self._grid_to_json(ls.grid, ls.ancho, ls.alto)
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(text)
+            save_layer(map_id, z, ls, _maps_dir())
 
         # Save stacks
-        stacks_list = []
-        for key, data in tab.stacks.items():
-            entry = {"pos": [key[0], key[1]], "z": key[2]}
-            if "eventos" in data:
-                entry["eventos"] = data["eventos"]
-            elif "capas" in data:
-                entry["eventos"] = data["capas"][0].get("eventos", []) if data.get("capas") else []
-            stacks_list.append(entry)
-        os.makedirs(_stacks_dir(), exist_ok=True)
-        stack_path = self._get_stack_path(map_id)
-        with open(stack_path, "w", encoding="utf-8") as f:
-            json.dump({"stacks": stacks_list}, f, indent=2, ensure_ascii=False)
+        save_stacks(map_id, tab.stacks, _stacks_dir())
 
         # Save multi_tiles
-        if tab.multi_tiles:
-            mt_path = os.path.join(RUTA_MAPAS, f"{map_id}_multitiles.json")
-            mt_data = {}
-            for (gx, gy, z), info in tab.multi_tiles.items():
-                key = f"{gx},{gy},{z}"
-                mt_data[key] = info
-            with open(mt_path, "w", encoding="utf-8") as f:
-                json.dump(mt_data, f, indent=2, ensure_ascii=False)
-        else:
-            mt_path = os.path.join(RUTA_MAPAS, f"{map_id}_multitiles.json")
-            if os.path.exists(mt_path):
-                os.remove(mt_path)
+        save_multi_tiles(map_id, tab.multi_tiles, _maps_dir())
 
-        # Save meta (spawn point, etc.)
-        meta = {}
-        # Scan all layers for 'inicio' sprite as spawn source of truth
-        spawn_found = None
-        for z in tab.layer_order:
-            ls = tab.layers.get(z)
-            if ls:
-                for (gx, gy), sid in ls.grid.items():
-                    if sid == "inicio":
-                        spawn_found = (gx, gy, z)
-                        break
-                if spawn_found:
-                    break
-        if spawn_found:
-            tab.spawn_pos = (spawn_found[0], spawn_found[1])
-            tab.spawn_z = spawn_found[2]
+        # Scan spawn from grid and save meta
+        spawn_pos, spawn_z = scan_spawn_from_grid(tab)
+        if spawn_pos:
+            tab.spawn_pos = spawn_pos
+            tab.spawn_z = spawn_z
         elif tab.spawn_pos:
-            # Check if spawn_pos still has inicio sprite
             ls = tab.layers.get(tab.spawn_z)
             if not ls or ls.grid.get(tab.spawn_pos) != "inicio":
                 tab.spawn_pos = None
                 tab.spawn_z = 0
-
-        if tab.spawn_pos:
-            meta["spawn"] = {"pos": list(tab.spawn_pos), "z": tab.spawn_z}
-        if meta:
-            meta_path = os.path.join(RUTA_MAPAS, f"{map_id}_meta.json")
-            with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump(meta, f, indent=2, ensure_ascii=False)
+        save_meta(map_id, tab.spawn_pos, tab.spawn_z, _maps_dir())
 
         tab.dirty = False
         self._map_tab_bar.set_tab_label(map_id, tab.label(), dirty=False)
@@ -905,6 +743,22 @@ class MapEditorPanel(BasePanel):
         self._drag_source = None
         self._update_tool_buttons()
 
+    def _toggle_tileset_mode(self):
+        """Toggle palette between elements and tileset mode."""
+        if self._palette.mode == "elements":
+            p = get_current_project()
+            if p and p.tileset:
+                self._palette.set_mode("tileset")
+            else:
+                return
+        else:
+            self._palette.set_mode("elements")
+        self._update_tileset_button()
+
+    def _update_tileset_button(self):
+        """Update the tileset mode button appearance."""
+        self._tileset_btn.toggled = (self._palette.mode == "tileset")
+
     def _update_tool_buttons(self):
         tool = getattr(self._palette, 'tool', 'select')
         self._tool_sel_btn.toggle = True
@@ -915,14 +769,12 @@ class MapEditorPanel(BasePanel):
         self._tool_era_btn.toggled = (tool == 'eraser')
         self._tool_buc_btn.toggled = (tool == 'bucket')
         self._tool_drag_btn.toggled = (tool == 'drag')
+        self._update_tileset_button()
 
     def _screen_to_grid(self, mx, my):
         sa = self._scroll_area
         vp = sa.viewport_rect()
-        ts = self._tile_size()
-        gx = (mx - vp.x + sa.scroll_x) // ts
-        gy = (my - vp.y + sa.scroll_y) // ts
-        return (gx, gy)
+        return self.viewport.screen_to_grid(mx, my, vp)
 
     def _start_paint_drag(self, mx, my, button):
         tab = self._current_tab
@@ -985,45 +837,22 @@ class MapEditorPanel(BasePanel):
         return True
 
     def _erase_tile(self, tab, ls, gx, gy):
-        """Borra un tile del grid, actualizando spawn si es necesario"""
-        if (gx, gy) in ls.grid:
-            sid = ls.grid[(gx, gy)]
-            if sid == "inicio" and tab.spawn_pos == (gx, gy):
-                tab.spawn_pos = None
-                tab.spawn_z = 0
-                self._event_widget.set_spawn(None, 0)
-            del ls.grid[(gx, gy)]
+        from editor.map_model import erase_tile
+        if erase_tile(tab, ls, gx, gy):
+            self._event_widget.set_spawn(tab.spawn_pos, tab.spawn_z)
             self._event_widget.set_selection(None, tab.active_z, None)
 
     def _flood_fill(self, tab, ls, gx, gy):
-        """Rellena tiles conectados del mismo tipo con el sprite seleccionado"""
+        from editor.map_model import flood_fill
         replacement = self._palette.selected_sprite_id
         if replacement is None:
             return
-        target = ls.grid.get((gx, gy))
-        if target == replacement:
-            return
-        w, h = ls.ancho, ls.alto
-        q = [(gx, gy)]
-        visited = set()
-        while q:
-            cx, cy = q.pop()
-            if (cx, cy) in visited:
-                continue
-            if cx < 0 or cx >= w or cy < 0 or cy >= h:
-                continue
-            if ls.grid.get((cx, cy)) != target:
-                continue
-            visited.add((cx, cy))
-            ls.grid[(cx, cy)] = replacement
+        modified = flood_fill(ls, gx, gy, replacement)
+        for cx, cy in modified:
             if replacement == "inicio":
                 tab.spawn_pos = (cx, cy)
                 tab.spawn_z = tab.active_z
                 self._event_widget.set_spawn((cx, cy), tab.active_z)
-            q.append((cx + 1, cy))
-            q.append((cx - 1, cy))
-            q.append((cx, cy + 1))
-            q.append((cx, cy - 1))
 
     def _paint_drag_to(self, mx, my):
         tab = self._current_tab
@@ -1332,10 +1161,21 @@ class MapEditorPanel(BasePanel):
         ts = self._tile_size()
         gr = pygame.Rect(vp_x, vp_y, self._scroll_area.viewport_rect().w, self._scroll_area.viewport_rect().h)
 
-        # Cache for sprite resolution: sprite_id → surface
-        if not hasattr(self, '_sprite_cache') or not hasattr(self, '_sprite_cache_zoom') or self._sprite_cache_zoom != self._zoom:
+        # Cache for sprite resolution: sprite_id -> surface
+        if not hasattr(self, '_sprite_cache') or not hasattr(self, '_sprite_cache_zoom') or self._sprite_cache_zoom != self.viewport.zoom:
             self._sprite_cache = {}
-            self._sprite_cache_zoom = self._zoom
+            self._sprite_cache_zoom = self.viewport.zoom
+
+        # Cache for tileset: tileset index -> surface
+        if not hasattr(self, '_tileset_cache') or not hasattr(self, '_tileset_cache_zoom') or self._tileset_cache_zoom != self.viewport.zoom:
+            self._tileset_cache = {}
+            self._tileset_cache_zoom = self.viewport.zoom
+
+        # Get tileset if available
+        tileset = None
+        p = get_current_project()
+        if p and p.tileset:
+            tileset = Tileset.load_from_project(p)
 
         # Render visible layers bottom-up (lowest Z first)
         for z in tab.layer_order:
@@ -1350,6 +1190,26 @@ class MapEditorPanel(BasePanel):
                 sy = vp_y + gy * ts - scroll_y
                 if sx + ts < gr.x or sx > gr.x + gr.w or sy + ts < gr.y or sy > gr.y + gr.h:
                     continue
+
+                # Handle tileset tiles
+                if sprite_id.startswith("tileset:") and tileset:
+                    try:
+                        tile_index = int(sprite_id.split(":", 1)[1])
+                        if tile_index not in self._tileset_cache:
+                            tile_surf = tileset.get_tile(tile_index)
+                            if tile_surf:
+                                scaled = pygame.transform.scale(tile_surf, (ts, ts))
+                                if alpha < 255:
+                                    scaled.set_alpha(alpha)
+                                self._tileset_cache[tile_index] = scaled
+                            else:
+                                self._tileset_cache[tile_index] = None
+                        cached = self._tileset_cache.get(tile_index)
+                        if isinstance(cached, pygame.Surface):
+                            surface.blit(cached, (sx, sy))
+                        continue
+                    except (ValueError, IndexError):
+                        pass
 
                 # Resolve sprite_id: element_id → sprite_id → file (cached)
                 if sprite_id not in self._sprite_cache:
@@ -1408,7 +1268,7 @@ class MapEditorPanel(BasePanel):
                         gsy = vp_y + (ghost_gy + r) * ts - scroll_y
                         pygame.draw.rect(surface, (100, 200, 255, 80), (gsx, gsy, ts, ts), 2)
 
-        # Ghost sprite while dragging (follows cursor)
+# Ghost sprite while dragging (follows cursor)
         if self._drag_source is not None:
             mx, my = pygame.mouse.get_pos()
             gr = pygame.Rect(vp_x, vp_y, self._scroll_area.viewport_rect().w,
@@ -1419,13 +1279,26 @@ class MapEditorPanel(BasePanel):
                 gsx = vp_x + ghost_gx * ts - scroll_x
                 gsy = vp_y + ghost_gy * ts - scroll_y
                 ghost_sid = self._drag_source[2]
-                if ghost_sid in self._sprite_cache:
-                    ghost = self._sprite_cache[ghost_sid]
-                    if isinstance(ghost, pygame.Surface):
-                        ghost.set_alpha(100)
-                        surface.blit(ghost, (gsx, gsy))
-                        ghost.set_alpha(255)
-                    pygame.draw.rect(surface, (100, 200, 255), (gsx, gsy, ts, ts), 2)
+                ghost_surf = None
+                if ghost_sid.startswith("tileset:") and tileset:
+                    try:
+                        tile_index = int(ghost_sid.split(":", 1)[1])
+                        if tile_index in self._tileset_cache:
+                            ghost_surf = self._tileset_cache[tile_index]
+                        else:
+                            tile_surf = tileset.get_tile(tile_index)
+                            if tile_surf:
+                                ghost_surf = pygame.transform.scale(tile_surf, (ts, ts))
+                                self._tileset_cache[tile_index] = ghost_surf
+                    except (ValueError, IndexError):
+                        pass
+                elif ghost_sid in self._sprite_cache:
+                    ghost_surf = self._sprite_cache[ghost_sid]
+                if isinstance(ghost_surf, pygame.Surface):
+                    ghost_surf.set_alpha(100)
+                    surface.blit(ghost_surf, (gsx, gsy))
+                    ghost_surf.set_alpha(255)
+                pygame.draw.rect(surface, (100, 200, 255), (gsx, gsy, ts, ts), 2)
 
     def draw(self, surface):
         if not self.visible:

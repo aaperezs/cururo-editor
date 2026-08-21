@@ -1,21 +1,34 @@
 import pygame
 import os
-import json
+import copy
 from editor.translation import I18n
 from editor.panels.base_panel import BasePanel
 from editor.widgets.button import Button
 from editor.widgets.label import Label
 from editor.widgets.panel import Panel
 from editor.widgets.text_input import TextInput
-from editor.behaviors import BEHAVIORS, DEFAULT_ELEMENT_PROPERTIES
+from editor.widgets.simple_dropdown import SimpleDropdown as _SimpleDropdown
+from editor.behaviors import BEHAVIORS
 from editor.elements import (
     get_all_elements, get_element, set_element, delete_element,
-    create_element, get_element_name, get_element_subtiles, set_element_subtile
+    create_element, get_element_name, get_element_subtiles, set_element_subtile,
+    get_element_tileset_idx, set_element_tileset_idx, element_exists, rename_element,
 )
-from editor.items_data import get_item_list
-from editor.ability_data import get_ability_list
 from editor.sprite_registry import get_sprite_registry, get_sprite_options, get_multi_tile_tiles
-from utils.sprite_manager import obtener as obtener_sprite
+from editor.common.sprite_loader import obtener as obtener_sprite
+from editor.element_crud import generate_new_id, rename_element_maps
+from editor.element_model import (
+    apply_props_to_element, apply_multi_tile, build_drop_options,
+)
+from editor.property_editor import build_properties
+from editor.drop_editor import (
+    build_drop_widgets, add_drop as _drop_add, remove_drop as _drop_remove,
+    update_drop_prob as _drop_update_prob, update_drop_item as _drop_update_item,
+    update_drop_ability as _drop_update_ability,
+)
+from editor.subtile_editor import (
+    build_subtile_widgets, update_subtile_z, update_subtile_behavior,
+)
 
 
 PADDING = 6
@@ -116,6 +129,22 @@ class ElementTab(BasePanel):
         ep.children.append(self._sprite_selector)
         y += 30
 
+        # Tileset index field (for tileset-based elements)
+        lbl = Label(PADDING, y, 80, 22, "Tileset idx:",
+                    font_size=12, color=(180, 185, 195))
+        lbl.parent = ep
+        ep.children.append(lbl)
+        self._tileset_idx_input = TextInput(90, y, 60, 22, default="",
+                                             max_chars=5, numeric_only=True)
+        self._tileset_idx_input.parent = ep
+        ep.children.append(self._tileset_idx_input)
+        # Help text
+        help_lbl = Label(155, y, 200, 22, "(vacío = usa sprite_id)",
+                         font_size=10, color=(120, 130, 140))
+        help_lbl.parent = ep
+        ep.children.append(help_lbl)
+        y += 30
+
         self._sprite_preview_surf = None
         y += 4
 
@@ -167,133 +196,93 @@ class ElementTab(BasePanel):
         bdata = BEHAVIORS.get(behavior, {})
         props_schema = bdata.get("properties", {})
         current_props = el.get("properties", {})
-        y = self._prop_y
-        for pkey, pdata in props_schema.items():
-            lbl = Label(PADDING + 10, y, 140, 22,
-                        pdata.get("label", pkey) + ":",
-                        font_size=11, color=(180, 185, 195))
-            lbl.parent = ep
-            ep.children.append(lbl)
-            self._prop_widgets[f"lbl_{pkey}"] = lbl
-            ptype = pdata.get("type", "bool")
-            val = current_props.get(pkey, pdata.get("default"))
-            if ptype == "bool":
-                btn = Button(155, y, 60, 22,
-                             self.i18n.t("app.yes") if val else self.i18n.t("app.no"))
-                btn.color = (50, 110, 50) if val else (100, 60, 60)
-                btn.text_color = (230, 230, 230) if val else (180, 180, 180)
-                btn._bool_val = val
-                def make_toggle(key, b):
-                    def fn():
-                        b._bool_val = not b._bool_val
-                        b.text = self.i18n.t("app.yes") if b._bool_val else self.i18n.t("app.no")
-                        b.color = (50, 110, 50) if b._bool_val else (100, 60, 60)
-                        b.text_color = (230, 230, 230) if b._bool_val else (180, 180, 180)
-                        self._editing_props[key] = b._bool_val
-                        self._dirty = True
-                    return fn
-                btn.callback = make_toggle(pkey, btn)
-                btn.parent = ep
-                ep.children.append(btn)
-                self._prop_widgets[pkey] = btn
-            elif ptype == "choice":
-                opts = pdata.get("options", [])
-                dd = _SimpleDropdown(155, y, 140, 22, [(o, o) for o in opts])
-                dd.set_selected(val)
-                dd._on_select = lambda v, k=pkey: self._on_prop_choice(k, v)
-                dd.parent = ep
-                ep.children.append(dd)
-                self._prop_widgets[pkey] = dd
-            elif ptype == "int":
-                inp = TextInput(155, y, 60, 22, default=str(val),
-                                max_chars=5, numeric_only=True)
-                inp._on_change = lambda k=pkey: self._on_prop_int(k)
-                inp.parent = ep
-                ep.children.append(inp)
-                self._prop_widgets[pkey] = inp
-            elif ptype == "drop_list":
-                self._drops_data = list(val) if isinstance(val, list) else []
-                self._prop_widgets[pkey] = self._drops_data
-                self._rebuild_drops_ui(y + 24, pkey)
-                y += 24 + max(1, len(self._drops_data)) * 26 + 28
-                continue
-            else:
-                inp = TextInput(155, y, 200, 22, default=str(val),
-                                max_chars=40, numeric_only=False)
-                inp._on_change = lambda k=pkey: self._on_prop_str(k)
-                inp.parent = ep
-                ep.children.append(inp)
-                self._prop_widgets[pkey] = inp
-            y += 26
+
+        def _on_bool(key, val):
+            self._editing_props[key] = val
+            self._dirty = True
+
+        def _on_choice(key, val):
+            self._editing_props[key] = val
+            self._dirty = True
+
+        def _on_int(key):
+            inp = self._prop_widgets.get(key)
+            if inp:
+                try:
+                    self._editing_props[key] = int(inp.text) if inp.text else 0
+                    self._dirty = True
+                except ValueError:
+                    pass
+
+        def _on_str(key):
+            inp = self._prop_widgets.get(key)
+            if inp:
+                self._editing_props[key] = inp.text
+                self._dirty = True
+
+        widgets, y = build_properties(
+            props_schema, current_props, self._prop_y,
+            self.i18n.t, _on_bool, _on_choice, _on_int, _on_str, ep,
+        )
+        for key, widget in widgets.items():
+            if widget is not None:
+                ep.children.append(widget)
+        self._prop_widgets = widgets
 
         if behavior == "multi_tile":
             self._build_subtile_ui(y, el)
 
     def _rebuild_drops_ui(self, start_y, pkey):
         ep = self._editor_panel
-        # Remove old drop widgets
         for w in list(getattr(self, "_drop_widgets", [])):
             if w in ep.children:
                 ep.children.remove(w)
         self._drop_widgets = []
-        y = start_y
-        item_opts = get_item_list()
-        ability_opts = [("", "Cualquiera")] + get_ability_list()
-        if not item_opts:
-            lbl = Label(PADDING + 20, y, 200, 18, self.i18n.t("element.no_items"),
-                        font_size=11, color=(140, 140, 150))
-            lbl.parent = ep; ep.children.append(lbl)
-            self._drop_widgets.append(lbl)
-            return
-        for di, drop in enumerate(self._drops_data):
-            # Item
-            dd = _SimpleDropdown(PADDING + 20, y, 130, 20, item_opts)
-            dd.set_selected(drop.get("item", ""))
-            dd._on_select = lambda v, d=drop: d.update({"item": v}) or self._mark_dirty()
-            dd.parent = ep; ep.children.append(dd)
-            self._drop_widgets.append(dd)
-            # Probability
-            inp = TextInput(155, y, 40, 20, default=str(drop.get("prob", 50)),
-                            max_chars=3, numeric_only=True)
-            inp._on_change = lambda d=drop, i=inp: self._on_drop_prob(d, i)
-            inp.parent = ep; ep.children.append(inp)
-            self._drop_widgets.append(inp)
-            # Ability
-            ab = _SimpleDropdown(200, y, 120, 20, ability_opts)
-            ab.set_selected(drop.get("ability", ""))
-            ab._on_select = lambda v, d=drop: d.update({"ability": v}) if v else d.pop("ability", None) or self._mark_dirty()
-            ab.parent = ep; ep.children.append(ab)
-            self._drop_widgets.append(ab)
-            # Remove
-            rm = Button(325, y, 20, 20, "X", callback=lambda di=di: self._remove_drop(di))
-            rm.color = (180, 60, 60); rm.text_color = (255, 255, 255)
-            rm.parent = ep; ep.children.append(rm)
-            self._drop_widgets.append(rm)
-            y += 26
-        # Add button
-        add_btn = Button(PADDING + 20, y, 100, 22, self.i18n.t("element.add_drop"),
-                         callback=self._add_drop)
-        add_btn.color = (50, 90, 50); add_btn.text_color = (220, 220, 220)
-        add_btn.parent = ep; ep.children.append(add_btn)
-        self._drop_widgets.append(add_btn)
+        item_opts, ability_opts = build_drop_options()
+
+        def _on_item(d, v):
+            _drop_update_item(d, v)
+            self._dirty = True
+
+        def _on_prob(d, i):
+            _drop_update_prob(d, i.text)
+            self._dirty = True
+
+        def _on_ability(d, v):
+            _drop_update_ability(d, v)
+            self._dirty = True
+
+        def _on_rm(di):
+            _drop_remove(self._drops_data, di)
+            self._dirty = True
+            self._rebuild_properties()
+
+        def _on_add():
+            _drop_add(self._drops_data)
+            self._dirty = True
+            self._rebuild_properties()
+
+        widgets, _ = build_drop_widgets(
+            self._drops_data, item_opts, ability_opts, start_y,
+            self.i18n.t, _on_item, _on_prob, _on_ability, _on_rm, _on_add, ep,
+        )
+        for w in widgets:
+            ep.children.append(w)
+        self._drop_widgets = widgets
 
     def _add_drop(self):
-        self._drops_data.append({"item": "", "prob": 50})
+        _drop_add(self._drops_data)
         self._dirty = True
         self._rebuild_properties()
 
     def _remove_drop(self, idx):
-        if 0 <= idx < len(self._drops_data):
-            self._drops_data.pop(idx)
+        if _drop_remove(self._drops_data, idx):
             self._dirty = True
             self._rebuild_properties()
 
     def _on_drop_prob(self, drop, inp):
-        try:
-            drop["prob"] = int(inp.text) if inp.text else 0
+        if _drop_update_prob(drop, inp.text):
             self._dirty = True
-        except ValueError:
-            pass
 
     def _mark_dirty(self):
         self._dirty = True
@@ -309,51 +298,34 @@ class ElementTab(BasePanel):
         if not tiles:
             lbl = Label(PADDING + 10, start_y, 300, 20,
                         "Sin sub-tiles en registry", font_size=11, color=(140, 140, 150))
-            lbl.parent = ep; ep.children.append(lbl)
+            lbl.parent = ep
+            ep.children.append(lbl)
             self._subtile_widgets.append(lbl)
             return
-        y = start_y + 4
-        sep = Panel(PADDING, y, ep.rect.w - PADDING * 2, 2, bg_color=(55, 60, 70))
-        sep.parent = ep; ep.children.append(sep)
-        self._subtile_widgets.append(sep)
-        y += 10
-        title = Label(PADDING, y, 300, 18, "Sub-tiles:", font_size=12, bold=True, color=(200, 210, 220))
-        title.parent = ep; ep.children.append(title)
-        self._subtile_widgets.append(title)
-        y += 24
         existing = get_element_subtiles(self._selected_id)
-        existing_map = {(st["col"], st["row"]): st for st in existing}
-        for t in tiles:
-            col, row = t.get("col", 0), t.get("row", 0)
-            st_data = existing_map.get((col, row), t)
-            lbl = Label(PADDING + 10, y, 100, 20,
-                        f"  ({col},{row})", font_size=11, color=(180, 185, 195))
-            lbl.parent = ep; ep.children.append(lbl)
-            self._subtile_widgets.append(lbl)
-            z_inp = TextInput(PADDING + 80, y, 30, 20, default=str(st_data.get("z", 0)),
-                              max_chars=2, numeric_only=True)
-            z_inp._on_change = lambda cc=col, rr=row, inp=z_inp: self._on_subtile_z(cc, rr, inp)
-            z_inp.parent = ep; ep.children.append(z_inp)
-            self._subtile_widgets.append(z_inp)
-            beh_opts = [(bid, bdata["label"]) for bid, bdata in BEHAVIORS.items()]
-            beh_dd = _SimpleDropdown(PADDING + 115, y, 120, 20, beh_opts)
-            beh_dd.set_selected(st_data.get("behavior", "decorative"))
-            beh_dd._on_select = lambda v, cc=col, rr=row: self._on_subtile_behavior(cc, rr, v)
-            beh_dd.parent = ep; ep.children.append(beh_dd)
-            self._subtile_widgets.append(beh_dd)
-            y += 24
+
+        def _on_z(cc, rr, inp):
+            if update_subtile_z(self._selected_id, cc, rr, inp.text, set_element_subtile):
+                self._dirty = True
+
+        def _on_beh(cc, rr, v):
+            update_subtile_behavior(self._selected_id, cc, rr, v, set_element_subtile)
+            self._dirty = True
+
+        widgets, _ = build_subtile_widgets(
+            tiles, existing, start_y, _on_z, _on_beh, ep,
+        )
+        for w in widgets:
+            ep.children.append(w)
+        self._subtile_widgets = widgets
         self._subtile_y = start_y
 
     def _on_subtile_z(self, col, row, inp):
-        try:
-            z = int(inp.text) if inp.text else 0
-            set_element_subtile(self._selected_id, col, row, {"z": z})
+        if update_subtile_z(self._selected_id, col, row, inp.text, set_element_subtile):
             self._dirty = True
-        except ValueError:
-            pass
 
     def _on_subtile_behavior(self, col, row, behavior):
-        set_element_subtile(self._selected_id, col, row, {"behavior": behavior})
+        update_subtile_behavior(self._selected_id, col, row, behavior, set_element_subtile)
         self._dirty = True
 
     def _on_prop_choice(self, key, value):
@@ -376,14 +348,9 @@ class ElementTab(BasePanel):
             self._dirty = True
 
     def _on_new(self):
-        base = "nuevo_elemento"
-        eid = base
-        n = 1
-        while eid in get_all_elements():
-            eid = f"{base}_{n}"
-            n += 1
+        eid = generate_new_id("nuevo_elemento", get_all_elements())
         first_sprite = next(iter(get_sprite_registry().keys()), "pasto")
-        create_element(eid, first_sprite, eid, "decorative", {})
+        create_element(eid, first_sprite, eid, "decorative", {}, tileset_idx=None)
         self._dirty = True
         self._select_element(eid)
 
@@ -393,13 +360,7 @@ class ElementTab(BasePanel):
         el = get_element(self._selected_id)
         if not el:
             return
-        base = self._selected_id + "_copia"
-        eid = base
-        n = 1
-        while eid in get_all_elements():
-            eid = f"{base}_{n}"
-            n += 1
-        import copy
+        eid = generate_new_id(self._selected_id + "_copia", get_all_elements())
         new_el = copy.deepcopy(el)
         set_element(eid, new_el)
         self._dirty = True
@@ -419,35 +380,12 @@ class ElementTab(BasePanel):
         new_id = self._prompt_new_id(self._selected_id)
         if not new_id or new_id == self._selected_id:
             return
-        from editor.elements import rename_element, element_exists
         if element_exists(new_id):
             return
-        # Update elementos.json
         if not rename_element(self._selected_id, new_id):
             return
-        # Update all map files referencing the old ID
-        import os, json
         maps_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "orm", "levels", "mapas")
-        updated = 0
-        for fname in os.listdir(maps_dir):
-            if not fname.endswith(".json"):
-                continue
-            fpath = os.path.join(maps_dir, fname)
-            try:
-                with open(fpath, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                changed = False
-                grid = data.get("grid", {})
-                for key, eid in list(grid.items()):
-                    if eid == self._selected_id:
-                        grid[key] = new_id
-                        changed = True
-                if changed:
-                    with open(fpath, "w", encoding="utf-8") as f:
-                        json.dump(data, f, indent=2, ensure_ascii=False)
-                    updated += 1
-            except Exception:
-                pass
+        updated = rename_element_maps(self._selected_id, new_id, maps_dir)
         if updated:
             print(f"  Actualizados {updated} archivo(s) de mapa")
         self._selected_id = new_id
@@ -526,26 +464,21 @@ class ElementTab(BasePanel):
             return
         el["name"] = self._name_input.text if self._name_input.text else self._selected_id
         el["sprite_id"] = self._sprite_selector.get_selected() or el["sprite_id"]
+        ts_idx_text = self._tileset_idx_input.text.strip()
+        if ts_idx_text:
+            try:
+                set_element_tileset_idx(self._selected_id, int(ts_idx_text))
+            except ValueError:
+                pass
+        else:
+            set_element_tileset_idx(self._selected_id, None)
         new_beh = self._behavior_selector.get_selected() or el.get("behavior", "decorative")
         old_beh = el.get("behavior")
         el["behavior"] = new_beh
-        if new_beh != old_beh:
-            el["properties"] = dict(DEFAULT_ELEMENT_PROPERTIES.get(new_beh, {}))
-        else:
-            for k, v in self._editing_props.items():
-                el["properties"][k] = v
-            for pkey, widget in self._prop_widgets.items():
-                if widget is getattr(self, "_drops_data", None):
-                    el["properties"][pkey] = list(self._drops_data)
-                    break
-        if new_beh == "multi_tile":
-            el["multi_tile"] = True
-            sprite_id = el.get("sprite_id")
-            tiles = get_multi_tile_tiles(sprite_id)
-            if tiles and not el.get("subtiles"):
-                el["subtiles"] = [dict(t) for t in tiles]
-        else:
-            el.pop("multi_tile", None)
+        drops_data = getattr(self, "_drops_data", None)
+        apply_props_to_element(el, new_beh, self._editing_props, drops_data)
+        tiles = get_multi_tile_tiles(el.get("sprite_id")) if new_beh == "multi_tile" else []
+        apply_multi_tile(el, el.get("sprite_id"), tiles)
         set_element(self._selected_id, el)
         self._editing_props = {}
         self._dirty = False
@@ -565,6 +498,9 @@ class ElementTab(BasePanel):
         sid = el.get("sprite_id")
         self._sprite_selector.set_selected(sid)
         self._update_sprite_preview(sid)
+        # Load tileset_idx
+        ts_idx = get_element_tileset_idx(eid)
+        self._tileset_idx_input.text = str(ts_idx) if ts_idx is not None else ""
         beh = el.get("behavior", "decorative")
         self._behavior_selector.set_selected(beh)
         self._editing_props = dict(el.get("properties", {}))
@@ -746,256 +682,4 @@ class ElementTab(BasePanel):
             surface.blit(self._sprite_preview_surf, (px, py))
 
 
-class _SimpleDropdown:
-    MAX_VISIBLE = 8
 
-    def __init__(self, x, y, w, h, options, selected=None):
-        self.rect = pygame.Rect(x, y, w, h)
-        self.parent = None
-        self.visible = True
-        self.enabled = True
-        self._all_options = list(options)
-        self._selected = selected or (options[0][0] if options else None)
-        self._open = False
-        self._on_select = None
-        self._filter_text = ""
-        self._filtered = list(options)
-        self._scroll_offset = 0
-        self._focus = False
-
-    def _abs_rect(self):
-        if self.parent:
-            pr = (self.parent.get_abs_rect() if hasattr(self.parent, 'get_abs_rect')
-                  else self.parent.rect)
-            return pygame.Rect(pr.x + self.rect.x, pr.y + self.rect.y,
-                               self.rect.w, self.rect.h)
-        return self.rect.copy()
-
-    def set_selected(self, value):
-        self._selected = value
-
-    def get_selected(self):
-        return self._selected
-
-    def _close_others(self):
-        if not self.parent:
-            return
-        for child in list(self.parent.children):
-            if isinstance(child, _SimpleDropdown) and child is not self and child._open:
-                child._open = False
-                child._filter_text = ""
-                child._filtered = list(child._all_options)
-                child._scroll_offset = 0
-
-    def _bring_to_front(self):
-        p = self.parent.children
-        if p and p[-1] is not self:
-            p.remove(self)
-            p.append(self)
-
-    def handle_event(self, event):
-        if not self.visible or not self.enabled:
-            return False
-        r = self._abs_rect()
-        if self._open:
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    self._open = False
-                    self._filter_text = ""
-                    self._filtered = list(self._all_options)
-                    self._scroll_offset = 0
-                    return True
-                elif event.key == pygame.K_RETURN:
-                    if self._filtered:
-                        val = self._filtered[0][0]
-                        self._selected = val
-                        self._open = False
-                        self._filter_text = ""
-                        self._filtered = list(self._all_options)
-                        self._scroll_offset = 0
-                        if self._on_select:
-                            self._on_select(val)
-                    return True
-                elif event.key == pygame.K_UP:
-                    if self._filtered:
-                        idx = self._get_selected_filtered_idx()
-                        new_idx = max(0, idx - 1)
-                        if new_idx < self._scroll_offset:
-                            self._scroll_offset = new_idx
-                        self._selected = self._filtered[new_idx][0]
-                    return True
-                elif event.key == pygame.K_DOWN:
-                    if self._filtered:
-                        idx = self._get_selected_filtered_idx()
-                        new_idx = min(len(self._filtered) - 1, idx + 1)
-                        if new_idx >= self._scroll_offset + self.MAX_VISIBLE:
-                            self._scroll_offset = new_idx - self.MAX_VISIBLE + 1
-                        self._selected = self._filtered[new_idx][0]
-                    return True
-                elif event.key == pygame.K_BACKSPACE:
-                    self._filter_text = self._filter_text[:-1]
-                    self._apply_filter()
-                    return True
-                elif event.unicode and event.unicode.isprintable():
-                    self._filter_text += event.unicode
-                    self._apply_filter()
-                    return True
-
-            if event.type == pygame.MOUSEWHEEL:
-                max_scroll = max(0, len(self._filtered) - self.MAX_VISIBLE)
-                self._scroll_offset = max(0, min(max_scroll, self._scroll_offset - event.y))
-                return True
-
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            mx, my = event.pos
-            if r.collidepoint(mx, my):
-                if not self._open:
-                    self._close_others()
-                self._open = not self._open
-                self._filter_text = ""
-                self._filtered = list(self._all_options)
-                self._scroll_offset = 0
-                if self._open and self.parent:
-                    self._bring_to_front()
-                return True
-            if self._open:
-                ih = 20
-                vis = min(len(self._filtered), self.MAX_VISIBLE)
-                total_h = vis * ih + 2
-                scr_h = pygame.display.get_surface().get_height() if pygame.display.get_surface() else 600
-                space_below = scr_h - (r.y + r.h)
-                open_up = total_h > space_below and r.y > total_h
-                dy = r.y - total_h if open_up else r.y + r.h
-                dd_rect = pygame.Rect(r.x, dy, r.w, total_h)
-                if dd_rect.y < 0:
-                    dd_rect.y = 0
-                if scr_h and dd_rect.y + dd_rect.h > scr_h:
-                    dd_rect.y = scr_h - dd_rect.h
-                has_scroll = len(self._filtered) > self.MAX_VISIBLE
-                sb_w = 10 if has_scroll else 0
-                if has_scroll:
-                    sb_rect = pygame.Rect(r.x + r.w - sb_w, dd_rect.y, sb_w, dd_rect.h)
-                    if sb_rect.collidepoint(mx, my):
-                        total = len(self._filtered)
-                        max_scroll = total - vis
-                        if max_scroll > 0:
-                            thumb_h = max(12, int(sb_rect.h * vis / total))
-                            thumb_y = sb_rect.y + int((self._scroll_offset / max_scroll) * (sb_rect.h - thumb_h))
-                            thumb = pygame.Rect(sb_rect.x, thumb_y, sb_rect.w, thumb_h)
-                            if thumb.collidepoint(mx, my):
-                                ratio = (my - sb_rect.y) / sb_rect.h
-                                self._scroll_offset = int(ratio * max_scroll)
-                            elif my < thumb_y:
-                                self._scroll_offset = max(0, self._scroll_offset - vis)
-                            else:
-                                self._scroll_offset = min(max_scroll, self._scroll_offset + vis)
-                        return True
-                item_rect = pygame.Rect(r.x, dd_rect.y, r.w - sb_w, vis * ih)
-                if item_rect.collidepoint(mx, my):
-                    click_idx = (my - dd_rect.y) // ih
-                    idx = self._scroll_offset + click_idx
-                    if 0 <= idx < len(self._filtered):
-                        val, lbl = self._filtered[idx]
-                        self._selected = val
-                        self._open = False
-                        self._filter_text = ""
-                        self._filtered = list(self._all_options)
-                        self._scroll_offset = 0
-                        if self._on_select:
-                            self._on_select(val)
-                        return True
-                self._open = False
-                self._filter_text = ""
-                self._filtered = list(self._all_options)
-                self._scroll_offset = 0
-                return True
-        if event.type == pygame.MOUSEBUTTONDOWN and self._open:
-            self._open = False
-            self._filter_text = ""
-            self._filtered = list(self._all_options)
-            self._scroll_offset = 0
-            return True
-        return False
-
-    def _get_selected_filtered_idx(self):
-        for i, (val, lbl) in enumerate(self._filtered):
-            if val == self._selected:
-                return i
-        return 0
-
-    def _apply_filter(self):
-        ft = self._filter_text.lower()
-        if not ft:
-            self._filtered = list(self._all_options)
-        else:
-            self._filtered = [(v, l) for v, l in self._all_options
-                              if ft in v.lower() or ft in l.lower()]
-        self._scroll_offset = 0
-
-    def draw(self, surface):
-        if not self.visible:
-            return
-        r = self._abs_rect()
-        i18n = I18n.instancia()
-        fuente = i18n.fuente(12) if i18n else pygame.font.SysFont("Arial", 12)
-        label = str(self._selected)
-        for val, lbl in self._all_options:
-            if val == self._selected:
-                label = lbl
-                break
-        pygame.draw.rect(surface, (50, 55, 65), r)
-        pygame.draw.rect(surface, (80, 90, 105), r, 1)
-        txt = fuente.render(label, True, (220, 220, 220))
-        surface.blit(txt, (r.x + 6, r.y + (r.h - txt.get_height()) // 2))
-        pygame.draw.polygon(surface, (160, 170, 180), [
-            (r.x + r.w - 12, r.y + r.h // 2 - 2),
-            (r.x + r.w - 6, r.y + r.h // 2 - 2),
-            (r.x + r.w - 9, r.y + r.h // 2 + 3)
-        ])
-        if self._open:
-            ih = 20
-            vis = min(len(self._filtered), self.MAX_VISIBLE)
-            total_h = vis * ih + 2
-            space_below = surface.get_height() - (r.y + r.h)
-            open_up = total_h > space_below and r.y > total_h
-            dy = r.y - total_h if open_up else r.y + r.h
-            dd_rect = pygame.Rect(r.x, dy, r.w, total_h)
-            if dd_rect.y < 0:
-                dd_rect.y = 0
-            if dd_rect.y + dd_rect.h > surface.get_height():
-                dd_rect.y = surface.get_height() - dd_rect.h
-            has_scroll = len(self._filtered) > self.MAX_VISIBLE
-            sb_w = 10 if has_scroll else 0
-            item_w = r.w - sb_w
-            pygame.draw.rect(surface, (45, 48, 56), dd_rect)
-            pygame.draw.rect(surface, (70, 75, 85), dd_rect, 1)
-            clip = surface.get_clip()
-            surface.set_clip(dd_rect)
-            for i in range(vis):
-                idx = self._scroll_offset + i
-                if idx >= len(self._filtered):
-                    break
-                val, lbl = self._filtered[idx]
-                ir = pygame.Rect(r.x, dy + i * ih, item_w, ih)
-                sel = val == self._selected
-                bg = (60, 65, 78) if sel else (45, 48, 56)
-                pygame.draw.rect(surface, bg, ir)
-                if i < vis - 1:
-                    pygame.draw.line(surface, (70, 75, 85), (ir.x, ir.y + ih), (ir.x + ir.w, ir.y + ih))
-                txt = fuente.render(lbl, True, (200, 200, 200))
-                surface.blit(txt, (ir.x + 6, ir.y + (ih - txt.get_height()) // 2))
-            if has_scroll:
-                sb_x = r.x + r.w - sb_w
-                track = pygame.Rect(sb_x, dy, sb_w, total_h)
-                pygame.draw.rect(surface, (35, 38, 44), track)
-                total = len(self._filtered)
-                thumb_h = max(12, int(total_h * vis / total))
-                max_scroll = total - vis
-                thumb_y = dy + int((self._scroll_offset / max_scroll) * (total_h - thumb_h)) if max_scroll > 0 else dy
-                thumb = pygame.Rect(sb_x + 1, thumb_y, sb_w - 2, thumb_h)
-                pygame.draw.rect(surface, (100, 110, 125), thumb)
-                pygame.draw.rect(surface, (130, 140, 155), thumb, 1)
-            if self._filter_text:
-                hint = fuente.render(f'"{self._filter_text}" ({len(self._filtered)})', True, (120, 140, 160))
-                surface.blit(hint, (dd_rect.x + 4, dd_rect.y + dd_rect.h - 16))
-            surface.set_clip(clip)
