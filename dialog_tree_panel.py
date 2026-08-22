@@ -7,7 +7,7 @@ from editor.pygame_gui_theme import create_gui
 from editor.dialog_data import (
     get_all_dialogo_keys, get_dialogo_by_key, set_dialogo_by_key,
     delete_dialogo_by_key, create_dialogo_by_key, rename_dialogo,
-    get_tree, set_tree_by_key, create_tree_key, add_node, remove_node,
+    get_tree, get_tree_by_key, set_tree_by_key, create_tree_key, add_node, remove_node,
     compile_to_flat, NODE_LABELS, NODE_COLORS, NODE_DEFAULTS,
     _parse_key, _make_key,
 )
@@ -28,6 +28,7 @@ class DialogTreePanel(BasePanel):
         ))
         self._selected_key = None
         self._selected_nid = None
+        self._selected_flat_idx = None
         self._tree_scroll = 0
         self._dirty = False
         self._node_widgets = {}
@@ -105,8 +106,38 @@ class DialogTreePanel(BasePanel):
     def _build_detail_area(self):
         ep = self._editor_panel
         self._detail_widgets.clear()
-        y = 0
+        y = ep.rect.h - 192
         ew = ep.rect.w
+
+        if self._selected_flat_idx is not None:
+            flat = get_dialogo_by_key(self._selected_key)
+            if flat and self._selected_flat_idx < len(flat):
+                lbl = pygame_gui.elements.UILabel(
+                    pygame.Rect(PADDING, y, ew - PADDING * 2, 18),
+                    f"Línea {self._selected_flat_idx + 1}/{len(flat)}", self._gui, container=ep
+                )
+                self._detail_widgets["type_label"] = lbl
+                y += 24
+                inp = pygame_gui.elements.UITextEntryLine(
+                    pygame.Rect(PADDING, y, ew - PADDING * 2, 22),
+                    initial_text=flat[self._selected_flat_idx],
+                    manager=self._gui, container=ep
+                )
+                self._detail_widgets["flat_text"] = inp
+                y += 28
+                up_btn = pygame_gui.elements.UIButton(
+                    pygame.Rect(PADDING, y, 80, 22), "Subir", self._gui, container=ep
+                )
+                self._detail_widgets["flat_up"] = up_btn
+                down_btn = pygame_gui.elements.UIButton(
+                    pygame.Rect(PADDING + 86, y, 80, 22), "Bajar", self._gui, container=ep
+                )
+                self._detail_widgets["flat_down"] = down_btn
+                add_btn = pygame_gui.elements.UIButton(
+                    pygame.Rect(PADDING + 172, y, 80, 22), "+ Línea", self._gui, container=ep
+                )
+                self._detail_widgets["flat_add"] = add_btn
+            return
 
         if not self._selected_nid:
             return
@@ -269,40 +300,66 @@ class DialogTreePanel(BasePanel):
         if not self._selected_key:
             return
         tree = get_tree_by_key(self._selected_key)
-        if not tree:
-            return
+        flat = get_dialogo_by_key(self._selected_key)
 
         tr = self._get_tree_rect()
         clip = surface.get_clip()
         surface.set_clip(tr)
 
-        nodes = tree.get("nodes", {})
-        start = tree.get("start", "")
-        visited = []
-        queue = [start] if start else []
-        drawn = 0
-        while queue and drawn < 100:
-            nid = queue.pop(0)
-            if nid in visited or nid not in nodes:
-                continue
-            visited.append(nid)
-            sy = tr.y + drawn * NODE_H - self._tree_scroll
-            if sy + NODE_H >= tr.y and sy <= tr.y + tr.h:
-                self._draw_node(surface, tr.x, sy, tr.w, nid, nodes[nid])
-            drawn += 1
-            node = nodes[nid]
-            if node["tipo"] == "opcion":
-                for ch in node.get("choices", []):
-                    if ch.get("next") and ch["next"] not in visited:
-                        queue.append(ch["next"])
-            elif node["tipo"] == "condicion":
-                if node.get("next") and node["next"] not in visited:
-                    queue.append(node["next"])
-                if node.get("next_false") and node["next_false"] not in visited:
-                    queue.append(node["next_false"])
-            else:
-                if node.get("next") and node["next"] not in visited:
-                    queue.append(node["next"])
+        i18n = I18n.instancia()
+        fuente = i18n.fuente(11) if i18n else pygame.font.SysFont("Arial", 11)
+
+        if tree:
+            nodes = tree.get("nodes", {})
+            start = tree.get("start", "")
+            visited = []
+            queue = [start] if start else []
+            drawn = 0
+            while queue and drawn < 100:
+                nid = queue.pop(0)
+                if nid in visited or nid not in nodes:
+                    continue
+                visited.append(nid)
+                sy = tr.y + drawn * NODE_H - self._tree_scroll
+                if sy + NODE_H >= tr.y and sy <= tr.y + tr.h:
+                    self._draw_node(surface, tr.x, sy, tr.w, nid, nodes[nid])
+                drawn += 1
+                node = nodes[nid]
+                if node["tipo"] == "opcion":
+                    for ch in node.get("choices", []):
+                        if ch.get("next") and ch["next"] not in visited:
+                            queue.append(ch["next"])
+                elif node["tipo"] == "condicion":
+                    if node.get("next") and node["next"] not in visited:
+                        queue.append(node["next"])
+                    if node.get("next_false") and node["next_false"] not in visited:
+                        queue.append(node["next_false"])
+                else:
+                    if node.get("next") and node["next"] not in visited:
+                        queue.append(node["next"])
+        elif flat:
+            for i, line in enumerate(flat):
+                sy = tr.y + i * NODE_H - self._tree_scroll
+                if sy + NODE_H >= tr.y and sy <= tr.y + tr.h:
+                    sel = i == self._selected_flat_idx
+                    bg = (55, 60, 78) if sel else (45, 48, 56)
+                    pygame.draw.rect(surface, bg, (tr.x, sy, tr.w, NODE_H))
+                    pygame.draw.rect(surface, (70, 75, 85), (tr.x, sy, tr.w, NODE_H), 1)
+                    if sel:
+                        pygame.draw.rect(surface, (70, 130, 200), (tr.x, sy, 3, NODE_H))
+                    badge = pygame.Rect(tr.x + 4, sy + 4, 40, NODE_H - 8)
+                    pygame.draw.rect(surface, (60, 120, 80), badge, border_radius=3)
+                    lbl_s = fuente.render("Línea", True, (255, 255, 255))
+                    surface.blit(lbl_s, (badge.x + (badge.w - lbl_s.get_width()) // 2,
+                                         badge.y + (badge.h - lbl_s.get_height()) // 2))
+                    txt = line if isinstance(line, str) else str(line)
+                    prev_s = fuente.render(txt, True, (180, 190, 200))
+                    surface.blit(prev_s, (tr.x + 52, sy + (NODE_H - prev_s.get_height()) // 2))
+                    self._node_widgets[f"flat_{i}"] = {
+                        "rect": pygame.Rect(tr.x, sy, tr.w, NODE_H),
+                        "del_rect": pygame.Rect(tr.x + tr.w - 22, sy + 4, 18, NODE_H - 8),
+                        "flat_idx": i,
+                    }
 
         surface.set_clip(clip)
 
@@ -399,6 +456,7 @@ class DialogTreePanel(BasePanel):
     def _on_save(self):
         if not self._selected_key:
             return
+        self._save_current_flat_line()
         self._save_current_node()
         # Also save flat version for legacy runtime
         flat = compile_to_flat(*_parse_key(self._selected_key))
@@ -476,8 +534,64 @@ class DialogTreePanel(BasePanel):
         self._build_ui()
 
     def _select_node(self, nid):
+        self._save_current_flat_line()
         self._save_current_node()
         self._selected_nid = nid
+        self._selected_flat_idx = None
+        self._build_ui()
+
+    def _save_current_flat_line(self):
+        if self._selected_flat_idx is None or not self._selected_key:
+            return
+        flat = get_dialogo_by_key(self._selected_key)
+        if not flat or self._selected_flat_idx >= len(flat):
+            return
+        inp = self._detail_widgets.get("flat_text")
+        if inp:
+            flat[self._selected_flat_idx] = inp.get_text()
+            set_dialogo_by_key(self._selected_key, flat)
+            self._dirty = True
+
+    def _delete_flat_line(self, idx):
+        if not self._selected_key:
+            return
+        flat = get_dialogo_by_key(self._selected_key)
+        if not flat or idx >= len(flat):
+            return
+        flat.pop(idx)
+        set_dialogo_by_key(self._selected_key, flat)
+        if self._selected_flat_idx == idx:
+            self._selected_flat_idx = min(idx, len(flat) - 1) if flat else None
+        elif self._selected_flat_idx is not None and self._selected_flat_idx > idx:
+            self._selected_flat_idx -= 1
+        self._dirty = True
+        self._build_ui()
+
+    def _add_flat_line(self):
+        if not self._selected_key:
+            return
+        flat = get_dialogo_by_key(self._selected_key)
+        if flat is None:
+            flat = []
+        flat.append("")
+        set_dialogo_by_key(self._selected_key, flat)
+        self._selected_flat_idx = len(flat) - 1
+        self._dirty = True
+        self._build_ui()
+
+    def _move_flat_line(self, delta):
+        if self._selected_flat_idx is None or not self._selected_key:
+            return
+        flat = get_dialogo_by_key(self._selected_key)
+        if not flat:
+            return
+        new_idx = self._selected_flat_idx + delta
+        if new_idx < 0 or new_idx >= len(flat):
+            return
+        flat[self._selected_flat_idx], flat[new_idx] = flat[new_idx], flat[self._selected_flat_idx]
+        set_dialogo_by_key(self._selected_key, flat)
+        self._selected_flat_idx = new_idx
+        self._dirty = True
         self._build_ui()
 
     # ── Modal ─────────────────────────────────────────────
@@ -606,25 +720,39 @@ class DialogTreePanel(BasePanel):
             if el == self._add_condicion_btn: self._on_add_node("condicion"); return True
             if el == self._add_accion_btn: self._on_add_node("accion"); return True
             if el == self._add_salto_btn: self._on_add_node("salto"); return True
+            if el == self._detail_widgets.get("flat_up"): self._move_flat_line(-1); return True
+            if el == self._detail_widgets.get("flat_down"): self._move_flat_line(1); return True
+            if el == self._detail_widgets.get("flat_add"): self._add_flat_line(); return True
 
         elif e.type == pygame_gui.UI_SELECTION_LIST_NEW_SELECTION:
             key = e.text
             if key in get_all_dialogo_keys():
                 self._save_current_node()
+                self._save_current_flat_line()
                 self._selected_key = key
                 self._selected_nid = None
+                self._selected_flat_idx = None
                 self._build_ui()
                 return True
 
-        # Custom node click handling
+        # Custom node/line click handling
         if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
-            mx, my = e.pos[0] + r.x, e.pos[1] + r.y
+            mx, my = pygame.mouse.get_pos()
             for nid, info in self._node_widgets.items():
                 if info["del_rect"].collidepoint(mx, my):
-                    self._on_delete_node(nid)
+                    if "flat_idx" in info:
+                        self._delete_flat_line(info["flat_idx"])
+                    else:
+                        self._on_delete_node(nid)
                     return True
                 if info["rect"].collidepoint(mx, my):
-                    self._select_node(nid)
+                    if "flat_idx" in info:
+                        self._save_current_flat_line()
+                        self._selected_flat_idx = info["flat_idx"]
+                        self._selected_nid = None
+                        self._build_ui()
+                    else:
+                        self._select_node(nid)
                     return True
 
         # Mouse wheel for tree scroll
@@ -650,8 +778,8 @@ class DialogTreePanel(BasePanel):
             return
         r = self.get_abs_rect()
         pygame.draw.rect(surface, self.bg_color, r)
-        self._draw_tree(surface)
         self._gui.draw_ui(surface.subsurface(r))
+        self._draw_tree(surface)
 
     def set_size(self, w, h):
         if self.rect.w != w or self.rect.h != h:
@@ -663,228 +791,7 @@ class DialogTreePanel(BasePanel):
 
 # ── Helpers ──
 
-class _TreeDropdown:
-    MAX_VISIBLE = 8
-
-    def __init__(self, x, y, w, h, options, selected=None):
-        self.rect = pygame.Rect(x, y, w, h)
-        self.parent = None
-        self.visible = True
-        self.enabled = True
-        self._all_options = list(options)
-        self._selected = selected or (options[0][0] if options else None)
-        self._open = False
-        self._on_select = None
-        self._filter_text = ""
-        self._filtered = list(options)
-        self._scroll_offset = 0
-        self._focus = False
-
-    def __repr__(self):
-        return f"_TreeDropdown({self._selected})"
-
-    def _abs_rect(self):
-        if self.parent:
-            pr = (self.parent.get_abs_rect() if hasattr(self.parent, 'get_abs_rect')
-                  else self.parent.rect)
-            return pygame.Rect(pr.x + self.rect.x, pr.y + self.rect.y,
-                               self.rect.w, self.rect.h)
-        return self.rect.copy()
-
-    def set_selected(self, value):
-        self._selected = value
-
-    def get_selected(self):
-        return self._selected
-
-    def _close_others(self):
-        pass
-
-    def _bring_to_front(self):
-        pass
-
-    def handle_event(self, event):
-        if not self.visible or not self.enabled:
-            return False
-        r = self._abs_rect()
-        if self._open:
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    self._open = False
-                    self._filter_text = ""
-                    self._filtered = list(self._all_options)
-                    self._scroll_offset = 0
-                    return True
-                elif event.key == pygame.K_RETURN:
-                    if self._filtered:
-                        val = self._filtered[0][0]
-                        self._selected = val
-                        self._open = False
-                        self._filter_text = ""
-                        self._filtered = list(self._all_options)
-                        self._scroll_offset = 0
-                        if self._on_select:
-                            self._on_select(val)
-                    return True
-                elif event.key == pygame.K_UP:
-                    if self._filtered:
-                        idx = self._get_selected_filtered_idx()
-                        new_idx = max(0, idx - 1)
-                        if new_idx < self._scroll_offset:
-                            self._scroll_offset = new_idx
-                        self._selected = self._filtered[new_idx][0]
-                    return True
-                elif event.key == pygame.K_DOWN:
-                    if self._filtered:
-                        idx = self._get_selected_filtered_idx()
-                        new_idx = min(len(self._filtered) - 1, idx + 1)
-                        if new_idx >= self._scroll_offset + self.MAX_VISIBLE:
-                            self._scroll_offset = new_idx - self.MAX_VISIBLE + 1
-                        self._selected = self._filtered[new_idx][0]
-                    return True
-                elif event.key == pygame.K_BACKSPACE:
-                    self._filter_text = self._filter_text[:-1]
-                    self._apply_filter()
-                    return True
-                elif event.unicode and event.unicode.isprintable():
-                    self._filter_text += event.unicode
-                    self._apply_filter()
-                    return True
-            if event.type == pygame.MOUSEWHEEL:
-                max_scroll = max(0, len(self._filtered) - self.MAX_VISIBLE)
-                self._scroll_offset = max(0, min(max_scroll, self._scroll_offset - event.y))
-                return True
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            mx, my = event.pos
-            if r.collidepoint(mx, my):
-                if not self._open:
-                    self._close_others()
-                self._open = not self._open
-                self._filter_text = ""
-                self._filtered = list(self._all_options)
-                self._scroll_offset = 0
-                if self._open and self.parent:
-                    self._bring_to_front()
-                return True
-            if self._open:
-                ih = 20
-                vis = min(len(self._filtered), self.MAX_VISIBLE)
-                total_h = vis * ih + 2
-                scr_h = pygame.display.get_surface().get_height() if pygame.display.get_surface() else 600
-                space_below = scr_h - (r.y + r.h)
-                open_up = total_h > space_below and r.y > total_h
-                dy = r.y - total_h if open_up else r.y + r.h
-                dd_rect = pygame.Rect(r.x, dy, r.w, total_h)
-                if dd_rect.y < 0:
-                    dd_rect.y = 0
-                if scr_h and dd_rect.y + dd_rect.h > scr_h:
-                    dd_rect.y = scr_h - dd_rect.h
-                has_scroll = len(self._filtered) > self.MAX_VISIBLE
-                if dd_rect.collidepoint(mx, my):
-                    click_idx = (my - dd_rect.y) // ih
-                    idx = self._scroll_offset + click_idx
-                    if 0 <= idx < len(self._filtered):
-                        val, lbl = self._filtered[idx]
-                        self._selected = val
-                        self._open = False
-                        self._filter_text = ""
-                        self._filtered = list(self._all_options)
-                        self._scroll_offset = 0
-                        if self._on_select:
-                            self._on_select(val)
-                        return True
-                self._open = False
-                self._filter_text = ""
-                self._filtered = list(self._all_options)
-                self._scroll_offset = 0
-                return True
-        if event.type == pygame.MOUSEBUTTONDOWN and self._open:
-            self._open = False
-            self._filter_text = ""
-            self._filtered = list(self._all_options)
-            self._scroll_offset = 0
-            return True
-        return False
-
-    def _get_selected_filtered_idx(self):
-        for i, (val, lbl) in enumerate(self._filtered):
-            if val == self._selected:
-                return i
-        return 0
-
-    def _apply_filter(self):
-        ft = self._filter_text.lower()
-        if not ft:
-            self._filtered = list(self._all_options)
-        else:
-            self._filtered = [(v, l) for v, l in self._all_options
-                              if ft in v.lower() or ft in l.lower()]
-        self._scroll_offset = 0
-
-    def draw(self, surface):
-        if not self.visible:
-            return
-        r = self._abs_rect()
-        i18n = I18n.instancia()
-        fuente = i18n.fuente(12) if i18n else pygame.font.SysFont("Arial", 12)
-        label = str(self._selected)
-        for val, lbl in self._all_options:
-            if val == self._selected:
-                label = lbl
-                break
-        pygame.draw.rect(surface, (50, 55, 65), r)
-        pygame.draw.rect(surface, (80, 90, 105), r, 1)
-        txt = fuente.render(label, True, (220, 220, 220))
-        surface.blit(txt, (r.x + 6, r.y + (r.h - txt.get_height()) // 2))
-        pygame.draw.polygon(surface, (160, 170, 180), [
-            (r.x + r.w - 12, r.y + r.h // 2 - 2),
-            (r.x + r.w - 6, r.y + r.h // 2 - 2),
-            (r.x + r.w - 9, r.y + r.h // 2 + 3)
-        ])
-        if self._open:
-            ih = 20
-            vis = min(len(self._filtered), self.MAX_VISIBLE)
-            total_h = vis * ih + 2
-            space_below = surface.get_height() - (r.y + r.h)
-            open_up = total_h > space_below and r.y > total_h
-            dy = r.y - total_h if open_up else r.y + r.h
-            dd_rect = pygame.Rect(r.x, dy, r.w, total_h)
-            if dd_rect.y < 0:
-                dd_rect.y = 0
-            if dd_rect.y + dd_rect.h > surface.get_height():
-                dd_rect.y = surface.get_height() - dd_rect.h
-            has_scroll = len(self._filtered) > self.MAX_VISIBLE
-            sb_w = 10 if has_scroll else 0
-            item_w = r.w - sb_w
-            pygame.draw.rect(surface, (45, 48, 56), dd_rect)
-            pygame.draw.rect(surface, (70, 75, 85), dd_rect, 1)
-            clip = surface.get_clip()
-            surface.set_clip(dd_rect)
-            for i in range(vis):
-                idx = self._scroll_offset + i
-                if idx >= len(self._filtered):
-                    break
-                val, lbl = self._filtered[idx]
-                ir = pygame.Rect(r.x, dy + i * ih, item_w, ih)
-                sel = val == self._selected
-                bg = (60, 65, 78) if sel else (45, 48, 56)
-                pygame.draw.rect(surface, bg, ir)
-                if i < vis - 1:
-                    pygame.draw.line(surface, (70, 75, 85), (ir.x, ir.y + ih), (ir.x + ir.w, ir.y + ih))
-                txt = fuente.render(lbl, True, (200, 200, 200))
-                surface.blit(txt, (ir.x + 6, ir.y + (ih - txt.get_height()) // 2))
-            if has_scroll:
-                sb_x = r.x + r.w - sb_w
-                track = pygame.Rect(sb_x, dy, sb_w, total_h)
-                pygame.draw.rect(surface, (35, 38, 44), track)
-                total = len(self._filtered)
-                thumb_h = max(12, int(total_h * vis / total))
-                max_scroll = total - vis
-                thumb_y = dy + int((self._scroll_offset / max_scroll) * (total_h - thumb_h)) if max_scroll > 0 else dy
-                thumb = pygame.Rect(sb_x + 1, thumb_y, sb_w - 2, thumb_h)
-                pygame.draw.rect(surface, (100, 110, 125), thumb)
-                pygame.draw.rect(surface, (130, 140, 155), thumb, 1)
-            surface.set_clip(clip)
+from editor.dialog_tree_dropdown import TreeDropdown as _TreeDropdown
 
 
 class _FakeInput:

@@ -1,4 +1,3 @@
-import json
 from typing import Sequence
 
 import pygame
@@ -38,34 +37,17 @@ from editor.menu_file_io import (
     persist,
     persist_controles,
 )
-from editor.menu_forms import (
-    build_item_form,
-    build_flag_form,
-    build_stat_form,
-    build_controls_form,
+from editor.menu_editor import (
+    TIPO_OPTIONS,
+    CONFIG_LABELS,
+    build_config_editor,
+    build_controls_section,
+    build_preview,
+    render_preview,
 )
 
 PADDING = 6
 TOOLBAR_H = 36
-
-TIPO_OPTIONS = [
-    ("lista_habilidades", "Habilidades"),
-    ("lista_consumibles", "Consumibles"),
-    ("equipo", "Equipo"),
-    ("lista", "Lista"),
-    ("opciones", "Opciones"),
-    ("controles", "Controles"),
-    ("stats_flags", "Stats/Flags"),
-    ("stats", "Stats"),
-]
-
-# Para estos tipos el apartado admite config JSON (items/flags).
-CONFIG_LABELS = {
-    "lista": "items",
-    "opciones": "items",
-    "stats_flags": "flags",
-    "stats": "stats",
-}
 
 class MenuTab(BasePanel):
     """Editor de menús editables (data/menus.json).
@@ -293,139 +275,30 @@ class MenuTab(BasePanel):
     # ── Vista previa en vivo ─────────────────────────────────
 
     def _build_preview(self, ex, ey, eh, y, ew_avail, container, apartados):
-        i = self.i18n
-        pygame_gui.elements.UILabel(
-            pygame.Rect(PADDING, y, ew_avail, 18), i.t("menu.preview_hint"),
-            self._gui, container=container
-        )
-        y += 22
-
-        ap_h = 72
-        ap_rect = pygame.Rect(PADDING, y, ew_avail - 60, ap_h)
-        ap_labels = []
-        for idx, ap in enumerate(apartados):
-            nombre = ap.get("nombre", ap.get("id", ""))
-            tipo = ap.get("tipo", "lista")
-            ap_labels.append(f"{idx + 1}. {nombre} ({tipo})")
-        self._apartado_labels = ap_labels
-        sel_label = None
-        if self._apartado_idx is not None and 0 <= self._apartado_idx < len(ap_labels):
-            sel_label = ap_labels[self._apartado_idx]
-        self._ap_list = pygame_gui.elements.UISelectionList(
-            ap_rect, item_list=ap_labels, manager=self._gui,
-            default_selection=sel_label, container=container
-        )
-        bx = ap_rect.right + 4
-        self._ap_add_btn = pygame_gui.elements.UIButton(
-            pygame.Rect(bx, ap_rect.y, 26, 24), "+",
-            self._gui, container=container
-        )
-        self._ap_del_btn = pygame_gui.elements.UIButton(
-            pygame.Rect(bx, ap_rect.y + 28, 26, 24), "X",
-            self._gui, container=container
-        )
-        bx2 = ap_rect.right + 32
-        self._ap_up_btn = pygame_gui.elements.UIButton(
-            pygame.Rect(bx2, ap_rect.y, 26, 24), "↑",
-            self._gui, container=container
-        )
-        self._ap_down_btn = pygame_gui.elements.UIButton(
-            pygame.Rect(bx2, ap_rect.y + 28, 26, 24), "↓",
-            self._gui, container=container
-        )
-
-        pv_y = ap_rect.bottom + 10
-        pv_h = eh - (pv_y - ey) - PADDING
-        avail = pygame.Rect(ex + PADDING, ey + pv_y, ew_avail - PADDING, pv_h)
-        gw, gh = self._preview.tamanio()
-        scale = min(avail.w / gw, avail.h / gh)
-        tw, th = max(1, int(gw * scale)), max(1, int(gh * scale))
-        self._preview_rect = pygame.Rect(
-            avail.x + (avail.w - tw) // 2, avail.y, tw, th
+        y, self._apartado_labels, self._ap_list, self._ap_add_btn, (self._ap_del_btn, self._ap_up_btn, self._ap_down_btn), self._preview_rect = build_preview(
+            ex, ey, eh, y, ew_avail, container, apartados,
+            self._gui, self._apartado_idx, self._apartado_labels,
+            self._preview, self.i18n,
         )
         self._preview_surface = None
         self._preview_sig = None
 
     def _render_preview(self):
-        if not self._menu or not self._menu.get("apartados"):
-            self._preview_surface = None
-            self._preview_sig = None
-            return
-        try:
-            sig = (self._selected_id, self._apartado_idx,
-                   json.dumps(self._menu, ensure_ascii=False, sort_keys=True))
-        except Exception:
-            sig = None
-        if sig == self._preview_sig:
-            return
-        self._preview_sig = sig
-        gw, gh = self._preview.tamanio()
-        surf = pygame.Surface((gw, gh))
-        self._preview.dibujar(surf, self._menu, self._apartado_idx or 0, 0)
-        self._preview_surface = surf
+        self._preview_surface, self._preview_sig = render_preview(
+            self._menu, self._selected_id, self._apartado_idx,
+            self._preview, self._preview_sig,
+        )
 
     # ── Editor visual de config (items/flags) ────────────────
 
     def _build_config_editor(self, y, ew_avail, container, ap, key):
-        i = self.i18n
-        items = ap.get(key) or []
-        if not isinstance(items, list):
-            items = []
-        self._config_key = key
-        self._config_items = items
-
-        if key == "items":
-            lbl = i.t("menu.config_items")
-        elif key == "flags":
-            lbl = i.t("menu.config_flags")
-        else:
-            lbl = i.t("menu.config_stats")
-        pygame_gui.elements.UILabel(
-            pygame.Rect(PADDING, y, ew_avail, 18), lbl, self._gui, container=container
+        y, self._config_key, self._config_items, self._item_idx, self._it_inps, self._it_accion_dd, self._it_params, self._cfg_list, self._cfg_add_btn, self._cfg_del_btn, self._cfg_dup_btn = build_config_editor(
+            y, ew_avail, self._gui, container, ap, key,
+            self._item_idx, self.i18n,
         )
-        y += 22
-
-        cfg_h = 84
-        cfg_rect = pygame.Rect(PADDING, y, ew_avail - 60, cfg_h)
-        labels = []
-        for idx, it in enumerate(items):
-            nombre = it.get("nombre") or it.get("id", "")
-            labels.append(f"{idx + 1}. {nombre}")
-        sel_label = None
-        if self._item_idx is not None and 0 <= self._item_idx < len(labels):
-            sel_label = labels[self._item_idx]
-        self._cfg_list = pygame_gui.elements.UISelectionList(
-            cfg_rect, item_list=labels, manager=self._gui,
-            default_selection=sel_label, container=container
-        )
-        self._cfg_add_btn = pygame_gui.elements.UIButton(
-            pygame.Rect(cfg_rect.right + 4, cfg_rect.y, 54, 24), "+",
-            self._gui, container=container
-        )
-        self._cfg_del_btn = pygame_gui.elements.UIButton(
-            pygame.Rect(cfg_rect.right + 4, cfg_rect.y + 28, 54, 24), "X",
-            self._gui, container=container
-        )
-        self._cfg_dup_btn = pygame_gui.elements.UIButton(
-            pygame.Rect(cfg_rect.right + 4, cfg_rect.y + 56, 54, 24), "Dup",
-            self._gui, container=container
-        )
-        y = cfg_rect.bottom + 8
-
-        if self._item_idx is not None and 0 <= self._item_idx < len(items):
-            it = items[self._item_idx]
-            if key == "items":
-                y, self._it_inps, self._it_accion_dd, self._it_params = build_item_form(
-                    y, ew_avail, self._gui, container, it
-                )
-            elif key == "flags":
-                y, self._it_inps = build_flag_form(y, ew_avail, self._gui, container, it)
-            else:
-                y, self._it_inps = build_stat_form(y, ew_avail, self._gui, container, it)
         return y
 
     def _build_controls_editor(self, y, ew_avail, container):
-        i = self.i18n
         if self._controles is None:
             self._controles = get_controles()
         controls = self._controles
@@ -433,8 +306,8 @@ class MenuTab(BasePanel):
         self._config_items = []
         self._item_idx = None
 
-        y, self._ctrl_list, self._ctrl_add_btn, (self._ctrl_del_btn, self._ctrl_dup_btn), self._ctrl_inps = build_controls_form(
-            y, ew_avail, self._gui, container, controls, self._control_idx, i
+        y, self._ctrl_list, self._ctrl_add_btn, (self._ctrl_del_btn, self._ctrl_dup_btn), self._ctrl_inps = build_controls_section(
+            y, ew_avail, self._gui, container, controls, self._control_idx, self.i18n,
         )
         return y
 
