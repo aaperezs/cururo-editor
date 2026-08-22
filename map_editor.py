@@ -1,34 +1,27 @@
 import pygame
 import os
-import sys
-import subprocess
 from editor.translation import I18n
 from editor.panels.base_panel import BasePanel
-from editor.widgets.button import Button, make_icon
-from editor.widgets.label import Label
-from editor.widgets.panel import Panel
 from editor.widgets.palette import EntityPalette
 from editor.widgets.event_editor_widget import EventEditorWidget
 from editor.widgets.scrollable import ScrollableArea
 from editor.widgets.tab_bar import TabBar
 from editor.widgets.layer_panel import LayerPanel
 from editor.widgets.dialog import Dialog
-from editor.sprite_map import get_sprite_file
-from editor.sprite_registry import get_sprite_registry
-from editor.elements import get_element, get_element_sprite_id, is_multi_tile_element
+from editor.elements import get_element, is_multi_tile_element
 from editor.map_tab import MapTab
 from editor.project import get_current_project
-from editor.tileset import Tileset, clear_cache as clear_tileset_cache
 from editor import workspace
-from editor.common.parser import parsear_mapa
-from editor.common.sprite_loader import obtener as obtener_sprite
-from editor.map_model import (
-    load_layer, save_layer, load_stacks, save_stacks,
-    load_multi_tiles, save_multi_tiles, load_meta, save_meta,
-    scan_spawn_from_grid,
-)
 from editor.map_viewport import MapViewport
 from editor.map_tools import MapTools
+from editor.map_file_io import (
+    create_new_map, load_map, resize_map, save_map,
+    get_workspace_data as _get_workspace_data,
+    sync_events_from_widget,
+)
+from editor.map_toolbar import build_toolbar, launch_game, select_project_folder
+from editor.map_dialogs import build_new_dialog, build_resize_dialog, open_map_dialog, open_save_dialog
+from editor.map_grid_renderer import GridRenderer
 
 
 
@@ -51,6 +44,7 @@ class MapEditorPanel(BasePanel):
         self._tab_order = []
         self.viewport = MapViewport()
         self.tools = MapTools(get_element_fn=get_element)
+        self._grid_renderer = GridRenderer()
         self._build_ui()
 
         p = get_current_project()
@@ -67,108 +61,26 @@ class MapEditorPanel(BasePanel):
     def _build_ui(self):
         self.clear()
 
+        from editor.widgets.panel import Panel
         toolbar = Panel(0, 0, self.rect.w, 36)
         self.add(toolbar)
+        btns = build_toolbar(self, toolbar)
 
-        self._new_btn = Button(6, 4, 60, 28, self.i18n.t("map.new"), callback=self._new_map)
-        self._new_btn.parent = toolbar
-        toolbar.children.append(self._new_btn)
+        self._new_btn = btns["new_btn"]
+        self._open_btn = btns["open_btn"]
+        self._save_btn = btns["save_btn"]
+        self._zoom_label = btns["zoom_label"]
+        self._test_btn = btns["test_btn"]
+        self._folder_btn = btns["folder_btn"]
+        self._resize_btn = btns["resize_btn"]
+        self._tileset_btn = btns["tileset_btn"]
+        self._tool_sel_btn = btns["tool_sel_btn"]
+        self._tool_era_btn = btns["tool_era_btn"]
+        self._tool_buc_btn = btns["tool_buc_btn"]
+        self._tool_drag_btn = btns["tool_drag_btn"]
 
-        self._open_btn = Button(72, 4, 90, 28, self.i18n.t("map.open"), callback=self._open_map)
-        self._open_btn.parent = toolbar
-        toolbar.children.append(self._open_btn)
-
-        self._save_btn = Button(168, 4, 90, 28, self.i18n.t("map.save"), callback=self._save_map)
-        self._save_btn.parent = toolbar
-        toolbar.children.append(self._save_btn)
-
-        _ico_grid = make_icon("grid", 18)
-        _grid_text = "" if _ico_grid else "Grid"
-        gbtn = Button(268, 4, 32, 28, text=_grid_text, icon=_ico_grid, callback=self._toggle_grid)
-        gbtn.parent = toolbar
-        toolbar.children.append(gbtn)
-
-        pbtn = Button(304, 4, 24, 28, "+", callback=self._zoom_in)
-        pbtn.parent = toolbar
-        toolbar.children.append(pbtn)
-
-        mbtn = Button(332, 4, 24, 28, "-", callback=self._zoom_out)
-        mbtn.parent = toolbar
-        toolbar.children.append(mbtn)
-
-        self._zoom_label = Label(360, 4, 50, 28, "100%", font_size=12)
-        self._zoom_label.parent = toolbar
-        toolbar.children.append(self._zoom_label)
-
-        _ico_play = make_icon("play", 18)
-        _play_text = "▶ Test" if not _ico_play else ""
-        self._test_btn = Button(420, 4, 32, 28, text=_play_text, icon=_ico_play, callback=self._launch_game)
-        self._test_btn.parent = toolbar
-        toolbar.children.append(self._test_btn)
-
-        self._folder_btn = Button(456, 4, 70, 28, "Carpeta", callback=self._select_project_folder)
-        self._folder_btn.parent = toolbar
-        toolbar.children.append(self._folder_btn)
-
-        resize_x = 610
-        self._resize_btn = Button(resize_x, 4, 60, 28, self.i18n.t("map.resize"), callback=self._resize_map)
-        self._resize_btn.parent = toolbar
-        toolbar.children.append(self._resize_btn)
-
-        _ico_tileset = make_icon("grid", 18)
-        _tileset_text = "Tileset" if not _ico_tileset else ""
-        self._tileset_btn = Button(resize_x + 66, 4, 32, 28, text=_tileset_text, icon=_ico_tileset, callback=self._toggle_tileset_mode)
-        self._tileset_btn.parent = toolbar
-        toolbar.children.append(self._tileset_btn)
-
-        # Tool selector buttons with icons
-        _ico_sel = make_icon("select", 18)
-        _ico_era = make_icon("eraser", 18)
-        _ico_buc = make_icon("bucket", 18)
-        _ico_drag = make_icon("drag", 18)
-        tx = resize_x + 102  # After tileset button (66 + 36)
-        self._tool_sel_btn = Button(tx, 4, 32, 28, icon=_ico_sel, callback=self._set_tool_select)
-        self._tool_sel_btn.parent = toolbar
-        toolbar.children.append(self._tool_sel_btn)
-        self._tool_era_btn = Button(tx + 36, 4, 32, 28, icon=_ico_era, callback=self._set_tool_eraser)
-        self._tool_era_btn.parent = toolbar
-        toolbar.children.append(self._tool_era_btn)
-        self._tool_buc_btn = Button(tx + 72, 4, 32, 28, icon=_ico_buc, callback=self._set_tool_bucket)
-        self._tool_buc_btn.parent = toolbar
-        toolbar.children.append(self._tool_buc_btn)
-        _drag_text = "" if _ico_drag else "↕"
-        self._tool_drag_btn = Button(tx + 108, 4, 32, 28, text=_drag_text, icon=_ico_drag, callback=self._set_tool_drag)
-        self._tool_drag_btn.parent = toolbar
-        toolbar.children.append(self._tool_drag_btn)
-
-        dw, dh = 300, 220
-        self._new_dialog = Dialog(
-            (self.rect.w - dw) // 2, (self.rect.h - dh) // 2, dw, dh,
-            title=self.i18n.t("map.new_title"),
-        )
-        self._new_dialog.build(
-            fields=[
-                (self.i18n.t("map.width"), "40", 4, True),
-                (self.i18n.t("map.height"), "30", 4, True),
-            ],
-            accept_text=self.i18n.t("dialog.accept"),
-            cancel_text=self.i18n.t("dialog.cancel"),
-            accept_callback=self._new_map_confirm,
-        )
-
-        self._resize_dialog = Dialog(
-            (self.rect.w - dw) // 2, (self.rect.h - dh) // 2, dw, dh,
-            title=self.i18n.t("map.resize_title"),
-        )
-        self._resize_dialog.build(
-            fields=[
-                (self.i18n.t("map.width"), "", 4, True),
-                (self.i18n.t("map.height"), "", 4, True),
-            ],
-            accept_text=self.i18n.t("dialog.accept"),
-            cancel_text=self.i18n.t("dialog.cancel"),
-            accept_callback=self._resize_map_confirm,
-        )
+        self._new_dialog = build_new_dialog(self)
+        self._resize_dialog = build_resize_dialog(self)
 
         tb_y = 36
         tb_h = 26
@@ -265,55 +177,13 @@ class MapEditorPanel(BasePanel):
         self.viewport.show_grid = not self.viewport.show_grid
 
     def _launch_game(self):
-        """Lanza el runtime del proyecto actual en un proceso separado"""
         tab = self._current_tab
         if tab and tab.map_id and not tab.map_id.startswith("_new_"):
             self._save_map()
-        p = get_current_project()
-        if not p:
-            print("[EDITOR] No hay proyecto seleccionado")
-            return
-        if getattr(sys, "frozen", False):
-            meipass = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
-            runtime = os.path.join(meipass, "orm", "main.py")
-            cwd = os.path.dirname(sys.executable)
-            cmd = [sys.executable, "--runtime", "--project", p.root]
-        else:
-            src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            runtime = os.path.join(src, "orm", "main.py")
-            cwd = src
-            cmd = [sys.executable, runtime, "--project", p.root]
-        if not os.path.exists(runtime):
-            print(f"[EDITOR] No se encuentra el runtime en {runtime}")
-            return
-        try:
-            subprocess.Popen(
-                cmd,
-                cwd=cwd,
-                creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
-            )
-            print(f"[EDITOR] Juego lanzado para {p.root}")
-        except Exception as e:
-            print(f"[EDITOR] Error lanzando juego: {e}")
+        launch_game()
 
     def _select_project_folder(self):
-        """Abre un diálogo para seleccionar la carpeta del proyecto"""
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        folder = filedialog.askdirectory(
-            title="Seleccionar carpeta del proyecto Orm",
-            initialdir=get_current_project().root
-        )
-        root.destroy()
-        if folder:
-            if os.path.exists(os.path.join(folder, "main.py")):
-                get_current_project().root = folder
-                self._folder_btn.text = os.path.basename(folder)
-                print(f"[EDITOR] Carpeta del proyecto: {folder}")
-            else:
-                print(f"[EDITOR] No se encuentra main.py en {folder}")
+        select_project_folder(self._folder_btn)
 
     def _new_map(self):
         self._new_dialog.rect.x = (self.rect.w - 300) // 2
@@ -328,18 +198,11 @@ class MapEditorPanel(BasePanel):
             w = max(5, min(200, w if w > 0 else 40))
             h = max(5, min(200, h if h > 0 else 30))
 
-            tab = MapTab(map_id=None)
-            tab.layers[0].ancho = w
-            tab.layers[0].alto = h
-            tab.layers[0].visible = True
-            tab.layers[0].opacity = 100
-
-            uid = f"_new_{id(tab)}"
-            tab.map_id = uid
-            self._tabs[uid] = tab
-            self._tab_order.append(uid)
-            self._map_tab_bar.add_tab(uid, tab.label(), dirty=False, closeable=True)
-            self._map_tab_bar.set_active_by_id(uid)
+            tab = create_new_map(w, h)
+            self._tabs[tab.map_id] = tab
+            self._tab_order.append(tab.map_id)
+            self._map_tab_bar.add_tab(tab.map_id, tab.label(), dirty=False, closeable=True)
+            self._map_tab_bar.set_active_by_id(tab.map_id)
             self.viewport.zoom = 1.0
             self._zoom_label.text = self.viewport.zoom_label()
             self._layer_panel.sync_layers(tab.layer_order)
@@ -365,7 +228,6 @@ class MapEditorPanel(BasePanel):
         self._resize_dialog.show()
 
     def _resize_map_confirm(self):
-        """Redimensiona el mapa con las nuevas dimensiones"""
         fields = self._resize_dialog._fields
         if len(fields) >= 2:
             nuevo_w = fields[0]["input"].get_value()
@@ -378,25 +240,7 @@ class MapEditorPanel(BasePanel):
                 self._resize_dialog.visible = False
                 return
 
-            tab.push_undo()
-
-            for z, ls in tab.layers.items():
-                old_w = ls.ancho
-                old_h = ls.alto
-                # Crop tiles that fall outside the new bounds
-                if nuevo_w < old_w or nuevo_h < old_h:
-                    ls.grid = {
-                        (gx, gy): sid
-                        for (gx, gy), sid in ls.grid.items()
-                        if gx < nuevo_w and gy < nuevo_h
-                    }
-                ls.ancho = nuevo_w
-                ls.alto = nuevo_h
-            # Clean up multi_tiles outside new bounds
-            for key in list(tab.multi_tiles.keys()):
-                gx, gy, z = key
-                if gx >= nuevo_w or gy >= nuevo_h:
-                    del tab.multi_tiles[key]
+            resize_map(tab, nuevo_w, nuevo_h)
 
             self._sync_ui()
             self._update_content_size()
@@ -405,18 +249,8 @@ class MapEditorPanel(BasePanel):
         self._resize_dialog.visible = False
 
     def _open_map(self):
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        path = filedialog.askopenfilename(
-            initialdir=_maps_dir(),
-            title=self.i18n.t("map.open"),
-            filetypes=[("Map files", "*.txt *.json"), ("Text maps", "*.txt"), ("JSON maps", "*.json")]
-        )
-        root.destroy()
-        if path:
-            map_id = os.path.splitext(os.path.basename(path))[0]
+        map_id = open_map_dialog(_maps_dir(), self.i18n.t("map.open"))
+        if map_id:
             self._load_map_into_tab(map_id)
 
     def _load_map_into_tab(self, map_id):
@@ -427,53 +261,7 @@ class MapEditorPanel(BasePanel):
             return
 
         tab = MapTab(map_id=map_id)
-
-        def _try_load_layer(z):
-            result = load_layer(map_id, z, _maps_dir())
-            if result is None:
-                return False
-            grid, ancho, alto = result
-            if z not in tab.layers:
-                tab.layers[z] = tab.layers[0].__class__()
-            tab.layers[z].grid = grid
-            tab.layers[z].ancho = ancho
-            tab.layers[z].alto = alto
-            return True
-
-        # Load Z=0 first to get base dimensions
-        if _try_load_layer(0):
-            tab.layers[0].visible = True
-            tab.layers[0].opacity = 100
-        else:
-            tab.layers[0].ancho = 40
-            tab.layers[0].alto = 30
-            tab.layers[0].visible = True
-            tab.layers[0].opacity = 100
-
-        # Scan and load any existing z-layer files (z1..z4)
-        for z in range(1, 5):
-            if _try_load_layer(z):
-                tab.layers[z].visible = True
-                tab.layers[z].opacity = 100
-
-        # Load stacks
-        tab.stacks = load_stacks(map_id, _stacks_dir())
-
-        # Load multi_tiles
-        tab.multi_tiles = load_multi_tiles(map_id, _maps_dir())
-
-        # Load meta (spawn point, etc.)
-        meta = load_meta(map_id, _maps_dir())
-        if meta:
-            tab.spawn_pos = meta.get("spawn_pos")
-            tab.spawn_z = meta.get("spawn_z", 0)
-
-        # If no spawn from meta, scan grid for 'inicio' sprite (legacy maps)
-        if not tab.spawn_pos:
-            spawn_pos, spawn_z = scan_spawn_from_grid(tab)
-            if spawn_pos:
-                tab.spawn_pos = spawn_pos
-                tab.spawn_z = spawn_z
+        load_map(tab, map_id, _maps_dir(), _stacks_dir())
 
         self._tabs[map_id] = tab
         self._tab_order.append(map_id)
@@ -488,22 +276,13 @@ class MapEditorPanel(BasePanel):
         self._save_workspace()
 
     def get_workspace_data(self):
-        data = {
-            "open_tabs": list(self._tab_order),
-            "active_tab": self._map_tab_bar.get_active(),
-        }
-        tabs_data = {}
-        for tid, tab in self._tabs.items():
-            tabs_data[tid] = {
-                "active_z": tab.active_z,
-                "spawn_pos": list(tab.spawn_pos) if tab.spawn_pos else None,
-                "spawn_z": tab.spawn_z,
-                "zoom": self.viewport.zoom,
-                "scroll_x": getattr(self._scroll_area, "scroll_x", 0),
-                "scroll_y": getattr(self._scroll_area, "scroll_y", 0),
-            }
-        data["tabs"] = tabs_data
-        return data
+        return _get_workspace_data(
+            self._tabs, self._tab_order,
+            self._map_tab_bar.get_active() if hasattr(self, "_map_tab_bar") else None,
+            self.viewport.zoom,
+            getattr(self._scroll_area, "scroll_x", 0),
+            getattr(self._scroll_area, "scroll_y", 0),
+        )
 
     def restore_workspace(self, maps_data):
         if not maps_data:
@@ -532,9 +311,8 @@ class MapEditorPanel(BasePanel):
         self._update_content_size()
 
     def _save_workspace(self):
-        from editor import workspace as ws
         data = {"maps": self.get_workspace_data()}
-        ws.save_workspace(data)
+        workspace.save_workspace(data)
 
     def _close_tab(self, tab_id):
         if tab_id in self._tabs:
@@ -548,7 +326,6 @@ class MapEditorPanel(BasePanel):
 
     def _sync_ui(self):
         self._update_tool_buttons()
-        self._sprite_cache = {}
         tab = self._current_tab
         if tab:
             self._layer_panel.sync_state(tab)
@@ -579,17 +356,7 @@ class MapEditorPanel(BasePanel):
 
         map_id = tab.map_id
         if not map_id or map_id.startswith("_new_"):
-            import tkinter as tk
-            from tkinter import filedialog
-            root = tk.Tk()
-            root.withdraw()
-            path = filedialog.asksaveasfilename(
-                initialdir=_maps_dir(),
-                title=self.i18n.t("app.save_as"),
-                defaultextension=".json",
-                filetypes=[("JSON maps", "*.json"), ("Text maps", "*.txt")]
-            )
-            root.destroy()
+            path = open_save_dialog(_maps_dir(), self.i18n.t("app.save_as"))
             if not path:
                 return
             new_id = os.path.splitext(os.path.basename(path))[0]
@@ -602,42 +369,14 @@ class MapEditorPanel(BasePanel):
             self._map_tab_bar.remove_tab(old_id)
             self._map_tab_bar.add_tab(new_id, tab.label(), dirty=False, closeable=True)
             self._map_tab_bar.set_active_by_id(new_id)
-            map_id = new_id
 
-        # Save widget eventos back to tab.stacks before writing
-        sel = self._event_widget.selected_pos
-        if sel:
-            z = self._event_widget.selected_z
-            key = (sel[0], sel[1], z)
-            if key in tab.stacks:
-                tab.stacks[key]["eventos"] = self._event_widget.get_eventos()
-            else:
-                tab.stacks[key] = {"pos": list(sel), "z": z, "eventos": self._event_widget.get_eventos()}
+        sync_events_from_widget(
+            tab, self._event_widget.selected_pos,
+            self._event_widget.selected_z, self._event_widget.get_eventos(),
+        )
 
-        # Save each layer
-        for z, ls in tab.layers.items():
-            save_layer(map_id, z, ls, _maps_dir())
-
-        # Save stacks
-        save_stacks(map_id, tab.stacks, _stacks_dir())
-
-        # Save multi_tiles
-        save_multi_tiles(map_id, tab.multi_tiles, _maps_dir())
-
-        # Scan spawn from grid and save meta
-        spawn_pos, spawn_z = scan_spawn_from_grid(tab)
-        if spawn_pos:
-            tab.spawn_pos = spawn_pos
-            tab.spawn_z = spawn_z
-        elif tab.spawn_pos:
-            ls = tab.layers.get(tab.spawn_z)
-            if not ls or ls.grid.get(tab.spawn_pos) != "inicio":
-                tab.spawn_pos = None
-                tab.spawn_z = 0
-        save_meta(map_id, tab.spawn_pos, tab.spawn_z, _maps_dir())
-
-        tab.dirty = False
-        self._map_tab_bar.set_tab_label(map_id, tab.label(), dirty=False)
+        save_map(tab, _maps_dir(), _stacks_dir())
+        self._map_tab_bar.set_tab_label(tab.map_id, tab.label(), dirty=False)
 
     def _on_layer_change_active(self, z):
         tab = self._current_tab
@@ -1158,147 +897,23 @@ class MapEditorPanel(BasePanel):
         if not tab:
             return
 
-        ts = self._tile_size()
-        gr = pygame.Rect(vp_x, vp_y, self._scroll_area.viewport_rect().w, self._scroll_area.viewport_rect().h)
-
-        # Cache for sprite resolution: sprite_id -> surface
-        if not hasattr(self, '_sprite_cache') or not hasattr(self, '_sprite_cache_zoom') or self._sprite_cache_zoom != self.viewport.zoom:
-            self._sprite_cache = {}
-            self._sprite_cache_zoom = self.viewport.zoom
-
-        # Cache for tileset: tileset index -> surface
-        if not hasattr(self, '_tileset_cache') or not hasattr(self, '_tileset_cache_zoom') or self._tileset_cache_zoom != self.viewport.zoom:
-            self._tileset_cache = {}
-            self._tileset_cache_zoom = self.viewport.zoom
-
-        # Get tileset if available
-        tileset = None
-        p = get_current_project()
-        if p and p.tileset:
-            tileset = Tileset.load_from_project(p)
-
-        # Render visible layers bottom-up (lowest Z first)
-        for z in tab.layer_order:
-            ls = tab.layers.get(z)
-            if not ls or not ls.visible or ls.opacity <= 0:
-                continue
-
-            alpha = max(1, int(ls.opacity * 2.55))
-
-            for (gx, gy), sprite_id in ls.grid.items():
-                sx = vp_x + gx * ts - scroll_x
-                sy = vp_y + gy * ts - scroll_y
-                if sx + ts < gr.x or sx > gr.x + gr.w or sy + ts < gr.y or sy > gr.y + gr.h:
-                    continue
-
-                # Handle tileset tiles
-                if sprite_id.startswith("tileset:") and tileset:
-                    try:
-                        tile_index = int(sprite_id.split(":", 1)[1])
-                        if tile_index not in self._tileset_cache:
-                            tile_surf = tileset.get_tile(tile_index)
-                            if tile_surf:
-                                scaled = pygame.transform.scale(tile_surf, (ts, ts))
-                                if alpha < 255:
-                                    scaled.set_alpha(alpha)
-                                self._tileset_cache[tile_index] = scaled
-                            else:
-                                self._tileset_cache[tile_index] = None
-                        cached = self._tileset_cache.get(tile_index)
-                        if isinstance(cached, pygame.Surface):
-                            surface.blit(cached, (sx, sy))
-                        continue
-                    except (ValueError, IndexError):
-                        pass
-
-                # Resolve sprite_id: element_id → sprite_id → file (cached)
-                if sprite_id not in self._sprite_cache:
-                    actual_sprite_id = sprite_id
-                    from editor.elements import _ELEMENTOS_DATA
-                    el = _ELEMENTOS_DATA.get(sprite_id)
-                    if el:
-                        esp_id = el.get("sprite_id")
-                        if esp_id:
-                            actual_sprite_id = esp_id
-                    info = get_sprite_registry().get(actual_sprite_id)
-                    if not info:
-                        info = get_sprite_registry().get(sprite_id)
-                    sprite_file = info["file"] if info else None
-                    sprite = obtener_sprite(sprite_file) if sprite_file else None
-                    if sprite:
-                        scaled = pygame.transform.scale(sprite, (ts, ts))
-                        if alpha < 255:
-                            scaled.set_alpha(alpha)
-                        self._sprite_cache[sprite_id] = scaled
-                    else:
-                        col = (80, 80, 90) if info else (50, 55, 60)
-                        self._sprite_cache[sprite_id] = col
-
-                cached = self._sprite_cache.get(sprite_id)
-                if isinstance(cached, pygame.Surface):
-                    surface.blit(cached, (sx, sy))
-                elif cached is not None:
-                    if alpha < 255:
-                        s = pygame.Surface((ts, ts), pygame.SRCALPHA)
-                        s.fill((*cached, alpha))
-                        surface.blit(s, (sx, sy))
-                    else:
-                        pygame.draw.rect(surface, cached, (sx, sy, ts, ts))
-
-                if self._show_grid and ts >= 8:
-                    pygame.draw.rect(surface, (45, 48, 52), (sx, sy, ts, ts), 1)
-
-        # Selection overlay (on active layer)
-        sel = self._event_widget.selected_pos
-        if sel:
-            sx = vp_x + sel[0] * ts - scroll_x
-            sy = vp_y + sel[1] * ts - scroll_y
-            pygame.draw.rect(surface, (255, 200, 50), (sx, sy, ts, ts), 3)
-
-        # Ghost preview for multi-tile placement
-        if self._palette.selected_sprite_id and is_multi_tile_element(self._palette.selected_sprite_id):
-            mx, my = pygame.mouse.get_pos()
-            if gr.collidepoint(mx, my):
-                rows, cols = self._get_multi_tile_dims(self._palette.selected_sprite_id)
-                ghost_gx = (mx - vp_x + scroll_x) // ts
-                ghost_gy = (my - vp_y + scroll_y) // ts
-                for r in range(rows):
-                    for c in range(cols):
-                        gsx = vp_x + (ghost_gx + c) * ts - scroll_x
-                        gsy = vp_y + (ghost_gy + r) * ts - scroll_y
-                        pygame.draw.rect(surface, (100, 200, 255, 80), (gsx, gsy, ts, ts), 2)
-
-# Ghost sprite while dragging (follows cursor)
-        if self._drag_source is not None:
-            mx, my = pygame.mouse.get_pos()
-            gr = pygame.Rect(vp_x, vp_y, self._scroll_area.viewport_rect().w,
-                             self._scroll_area.viewport_rect().h)
-            if gr.collidepoint(mx, my):
-                ghost_gx = (mx - vp_x + scroll_x) // ts
-                ghost_gy = (my - vp_y + scroll_y) // ts
-                gsx = vp_x + ghost_gx * ts - scroll_x
-                gsy = vp_y + ghost_gy * ts - scroll_y
-                ghost_sid = self._drag_source[2]
-                ghost_surf = None
-                if ghost_sid.startswith("tileset:") and tileset:
-                    try:
-                        tile_index = int(ghost_sid.split(":", 1)[1])
-                        if tile_index in self._tileset_cache:
-                            ghost_surf = self._tileset_cache[tile_index]
-                        else:
-                            tile_surf = tileset.get_tile(tile_index)
-                            if tile_surf:
-                                ghost_surf = pygame.transform.scale(tile_surf, (ts, ts))
-                                self._tileset_cache[tile_index] = ghost_surf
-                    except (ValueError, IndexError):
-                        pass
-                elif ghost_sid in self._sprite_cache:
-                    ghost_surf = self._sprite_cache[ghost_sid]
-                if isinstance(ghost_surf, pygame.Surface):
-                    ghost_surf.set_alpha(100)
-                    surface.blit(ghost_surf, (gsx, gsy))
-                    ghost_surf.set_alpha(255)
-                pygame.draw.rect(surface, (100, 200, 255), (gsx, gsy, ts, ts), 2)
+        vp = self._scroll_area.viewport_rect()
+        self._grid_renderer.draw(
+            surface=surface,
+            tab=tab,
+            tile_size=self._tile_size(),
+            vp_x=vp_x,
+            vp_y=vp_y,
+            vp_w=vp.w,
+            vp_h=vp.h,
+            scroll_x=scroll_x,
+            scroll_y=scroll_y,
+            show_grid=self.viewport.show_grid,
+            selected_sprite_id=self._palette.selected_sprite_id,
+            selected_pos=self._event_widget.selected_pos,
+            drag_source=getattr(self, '_drag_source', None),
+            zoom=self.viewport.zoom,
+        )
 
     def draw(self, surface):
         if not self.visible:
