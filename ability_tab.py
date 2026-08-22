@@ -7,9 +7,10 @@ from editor.widgets.panel import Panel
 from editor.widgets.text_input import TextInput
 from editor.widgets.simple_dropdown import SimpleDropdown as _SimpleDropdown
 from editor.ability_data import (
-    get_abilities, get_ability, set_ability, delete_ability,
-    create_ability, get_ability_list, get_skin_list, is_protected
+    get_abilities, get_ability, set_ability,
+    get_ability_list, get_skin_list, is_protected
 )
+from editor.ability_crud import create_new_ability, clone_ability, delete_ability_by_id
 
 PADDING = 6
 ROW_H = 28
@@ -121,36 +122,21 @@ class AbilityTab(BasePanel):
         y += 10
 
     def _on_new(self):
-        base = "nueva_habilidad"
-        hid = base
-        n = 1
-        while hid in get_abilities():
-            hid = f"{base}_{n}"
-            n += 1
-        create_ability(hid)
+        hid = create_new_ability()
         self._select_ability(hid)
 
     def _on_clone(self):
         if not self._selected_id:
             return
-        data = get_ability(self._selected_id)
-        if not data:
-            return
-        base = self._selected_id + "_copia"
-        hid = base
-        n = 1
-        while hid in get_abilities():
-            hid = f"{base}_{n}"
-            n += 1
-        set_ability(hid, data)
-        self._select_ability(hid)
+        hid = clone_ability(self._selected_id)
+        if hid:
+            self._select_ability(hid)
 
     def _on_delete(self):
         if not self._selected_id:
             return
-        if is_protected(self._selected_id):
+        if not delete_ability_by_id(self._selected_id):
             return
-        delete_ability(self._selected_id)
         self._selected_id = None
         self._dirty = True
         self._editor_panel.visible = False
@@ -282,59 +268,3 @@ class AbilityTab(BasePanel):
             pygame.draw.rect(surface, (r, g, b), swatch)
             pygame.draw.rect(surface, (80, 90, 105), swatch, 1)
 
-
-
-        txt = fuente.render(label, True, (220, 220, 220))
-        surface.blit(txt, (r.x + 6, r.y + (r.h - txt.get_height()) // 2))
-        pygame.draw.polygon(surface, (160, 170, 180), [
-            (r.x + r.w - 12, r.y + r.h // 2 - 2),
-            (r.x + r.w - 6, r.y + r.h // 2 - 2),
-            (r.x + r.w - 9, r.y + r.h // 2 + 3)
-        ])
-        if self._open:
-                ih = 20
-                vis = min(len(self._filtered), self.MAX_VISIBLE)
-                total_h = vis * ih + 2
-                space_below = surface.get_height() - (r.y + r.h)
-                open_up = total_h > space_below and r.y > total_h
-                dy = r.y - total_h if open_up else r.y + r.h
-                dd_rect = pygame.Rect(r.x, dy, r.w, total_h)
-                if dd_rect.y < 0:
-                    dd_rect.y = 0
-                if dd_rect.y + dd_rect.h > surface.get_height():
-                    dd_rect.y = surface.get_height() - dd_rect.h
-                has_scroll = len(self._filtered) > self.MAX_VISIBLE
-                sb_w = 10 if has_scroll else 0
-                item_w = r.w - sb_w
-                pygame.draw.rect(surface, (45, 48, 56), dd_rect)
-                pygame.draw.rect(surface, (70, 75, 85), dd_rect, 1)
-                clip = surface.get_clip()
-                surface.set_clip(dd_rect)
-                for i in range(vis):
-                    idx = self._scroll_offset + i
-                    if idx >= len(self._filtered):
-                        break
-                    val, lbl = self._filtered[idx]
-                    ir = pygame.Rect(r.x, dy + i * ih, item_w, ih)
-                    sel = val == self._selected
-                    bg = (60, 65, 78) if sel else (45, 48, 56)
-                    pygame.draw.rect(surface, bg, ir)
-                    if i < vis - 1:
-                        pygame.draw.line(surface, (70, 75, 85), (ir.x, ir.y + ih), (ir.x + ir.w, ir.y + ih))
-                    txt = fuente.render(lbl, True, (200, 200, 200))
-                    surface.blit(txt, (ir.x + 6, ir.y + (ih - txt.get_height()) // 2))
-                if has_scroll:
-                    sb_x = r.x + r.w - sb_w
-                    track = pygame.Rect(sb_x, dy, sb_w, total_h)
-                    pygame.draw.rect(surface, (35, 38, 44), track)
-                    total = len(self._filtered)
-                    thumb_h = max(12, int(total_h * vis / total))
-                    max_scroll = total - vis
-                    thumb_y = dy + int((self._scroll_offset / max_scroll) * (total_h - thumb_h)) if max_scroll > 0 else dy
-                    thumb = pygame.Rect(sb_x + 1, thumb_y, sb_w - 2, thumb_h)
-                    pygame.draw.rect(surface, (100, 110, 125), thumb)
-                    pygame.draw.rect(surface, (130, 140, 155), thumb, 1)
-                if self._filter_text:
-                    hint = fuente.render(f'"{self._filter_text}" ({len(self._filtered)})', True, (120, 140, 160))
-                    surface.blit(hint, (dd_rect.x + 4, dd_rect.y + dd_rect.h - 16))
-                surface.set_clip(clip)

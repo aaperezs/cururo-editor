@@ -7,8 +7,12 @@ from editor.widgets.panel import Panel
 from editor.widgets.text_input import TextInput
 from editor.widgets.simple_dropdown import SimpleDropdown as _SimpleDropdown
 from editor.behaviors import (
-    get_behaviors, get_behavior, set_behavior, delete_behavior,
+    get_behaviors, get_behavior, set_behavior,
     get_behavior_list, get_behavior_groups,
+)
+from editor.behavior_crud import (
+    create_new_behavior, save_behavior, delete_behavior_by_id,
+    add_property_to_behavior, remove_property_from_behavior,
 )
 
 PADDING = 6
@@ -52,20 +56,7 @@ class CustomBehaviorsPanel(BasePanel):
         pass
 
     def _on_new(self):
-        names = [bid for bid, _ in get_behavior_list()]
-        base = "custom"
-        n = 1
-        while f"{base}_{n}" in names:
-            n += 1
-        bid = f"{base}_{n}"
-        data = {
-            "label": f"Custom {n}",
-            "group": "decoracion",
-            "class_path": "entities.generic.GenericEntity",
-            "target_list": None,
-            "properties": {}
-        }
-        set_behavior(bid, data)
+        bid = create_new_behavior()
         self._selected_id = bid
         self._prop_scroll = 0
         self._rebuild_editor()
@@ -169,26 +160,13 @@ class CustomBehaviorsPanel(BasePanel):
     def _on_add_property(self):
         if not self._selected_id:
             return
-        data = get_behavior(self._selected_id)
-        if not data:
-            return
-        props = data.setdefault("properties", {})
-        base = "prop"
-        n = 1
-        while f"{base}_{n}" in props:
-            n += 1
-        props[f"{base}_{n}"] = {"type": "string", "default": "", "label": f"Prop {n}"}
-        set_behavior(self._selected_id, data)
+        add_property_to_behavior(self._selected_id)
         self._rebuild_editor()
 
     def _on_remove_property(self, key):
         if not self._selected_id:
             return
-        data = get_behavior(self._selected_id)
-        if not data:
-            return
-        data.get("properties", {}).pop(key, None)
-        set_behavior(self._selected_id, data)
+        remove_property_from_behavior(self._selected_id, key)
         self._prop_scroll = 0
         self._rebuild_editor()
 
@@ -215,16 +193,14 @@ class CustomBehaviorsPanel(BasePanel):
         if not new_id:
             new_id = self._selected_id
 
-        if new_id != self._selected_id:
-            delete_behavior(self._selected_id)
-        set_behavior(new_id, data)
+        save_behavior(new_id, data, old_id=self._selected_id)
         self._selected_id = new_id
         self._rebuild_editor()
 
     def _on_delete(self):
         if not self._selected_id:
             return
-        delete_behavior(self._selected_id)
+        delete_behavior_by_id(self._selected_id)
         self._selected_id = None
         self._prop_scroll = 0
         self._rebuild_editor()
@@ -313,59 +289,3 @@ class CustomBehaviorsPanel(BasePanel):
             if child.visible:
                 child.draw(surface)
 
-
-
-        txt = fuente.render(label, True, (220, 220, 220))
-        surface.blit(txt, (r.x + 6, r.y + (r.h - txt.get_height()) // 2))
-        pygame.draw.polygon(surface, (160, 170, 180), [
-            (r.x + r.w - 12, r.y + r.h // 2 - 2),
-            (r.x + r.w - 6, r.y + r.h // 2 - 2),
-            (r.x + r.w - 9, r.y + r.h // 2 + 3)
-        ])
-        if self._open:
-            ih = 20
-            vis = min(len(self._filtered), self.MAX_VISIBLE)
-            total_h = vis * ih + 2
-            space_below = surface.get_height() - (r.y + r.h)
-            open_up = total_h > space_below and r.y > total_h
-            dy = r.y - total_h if open_up else r.y + r.h
-            dd_rect = pygame.Rect(r.x, dy, r.w, total_h)
-            if dd_rect.y < 0:
-                dd_rect.y = 0
-            if dd_rect.y + dd_rect.h > surface.get_height():
-                dd_rect.y = surface.get_height() - dd_rect.h
-            has_scroll = len(self._filtered) > self.MAX_VISIBLE
-            sb_w = 10 if has_scroll else 0
-            item_w = r.w - sb_w
-            pygame.draw.rect(surface, (45, 48, 56), dd_rect)
-            pygame.draw.rect(surface, (70, 75, 85), dd_rect, 1)
-            clip = surface.get_clip()
-            surface.set_clip(dd_rect)
-            for i in range(vis):
-                idx = self._scroll_offset + i
-                if idx >= len(self._filtered):
-                    break
-                val, lbl = self._filtered[idx]
-                ir = pygame.Rect(r.x, dy + i * ih, item_w, ih)
-                sel = val == self._selected
-                bg = (60, 65, 78) if sel else (45, 48, 56)
-                pygame.draw.rect(surface, bg, ir)
-                if i < vis - 1:
-                    pygame.draw.line(surface, (70, 75, 85), (ir.x, ir.y + ih), (ir.x + ir.w, ir.y + ih))
-                txt = fuente.render(lbl, True, (200, 200, 200))
-                surface.blit(txt, (ir.x + 6, ir.y + (ih - txt.get_height()) // 2))
-            if has_scroll:
-                sb_x = r.x + r.w - sb_w
-                track = pygame.Rect(sb_x, dy, sb_w, total_h)
-                pygame.draw.rect(surface, (35, 38, 44), track)
-                total = len(self._filtered)
-                thumb_h = max(12, int(total_h * vis / total))
-                max_scroll = total - vis
-                thumb_y = dy + int((self._scroll_offset / max_scroll) * (total_h - thumb_h)) if max_scroll > 0 else dy
-                thumb = pygame.Rect(sb_x + 1, thumb_y, sb_w - 2, thumb_h)
-                pygame.draw.rect(surface, (100, 110, 125), thumb)
-                pygame.draw.rect(surface, (130, 140, 155), thumb, 1)
-            if self._filter_text:
-                hint = fuente.render(f'"{self._filter_text}" ({len(self._filtered)})', True, (120, 140, 160))
-                surface.blit(hint, (dd_rect.x + 4, dd_rect.y + dd_rect.h - 16))
-            surface.set_clip(clip)

@@ -6,9 +6,9 @@ from editor.widgets.label import Label
 from editor.widgets.panel import Panel
 from editor.widgets.text_input import TextInput
 from editor.widgets.simple_dropdown import SimpleDropdown as _SimpleDropdown
-from editor.items_data import (
-    get_all_items, get_item, set_item, delete_item, create_item, get_item_list,
-    rename_item, item_exists
+from editor.items_data import get_all_items, get_item, set_item, get_item_list
+from editor.item_crud import (
+    create_new_item, clone_item, delete_item_by_id, rename_item_with_refs,
 )
 from editor.sprite_registry import get_sprite_registry, get_sprite_options
 from editor.common.sprite_loader import obtener as obtener_sprite
@@ -231,34 +231,20 @@ class ItemTab(BasePanel):
             self._rebuild_effects()
 
     def _on_new(self):
-        base = "item_nuevo"
-        iid = base
-        n = 1
-        while iid in get_all_items():
-            iid = f"{base}_{n}"
-            n += 1
-        create_item(iid)
+        iid = create_new_item()
         self._select_item(iid)
 
     def _on_clone(self):
         if not self._selected_id:
             return
-        data = get_item(self._selected_id)
-        if not data:
-            return
-        base = self._selected_id + "_copia"
-        iid = base
-        n = 1
-        while iid in get_all_items():
-            iid = f"{base}_{n}"
-            n += 1
-        set_item(iid, data)
-        self._select_item(iid)
+        iid = clone_item(self._selected_id)
+        if iid:
+            self._select_item(iid)
 
     def _on_delete(self):
         if not self._selected_id:
             return
-        delete_item(self._selected_id)
+        delete_item_by_id(self._selected_id)
         self._selected_id = None
         self._dirty = True
         self._editor_panel.visible = False
@@ -317,62 +303,11 @@ class ItemTab(BasePanel):
         new_id = self._prompt_new_id(self._selected_id)
         if not new_id or new_id == self._selected_id:
             return
-        if item_exists(new_id):
-            return
-        if not rename_item(self._selected_id, new_id):
-            return
-        # Update elementos.json references (drop_list properties)
-        import os, json
         from editor.project import get_current_project
         proj = get_current_project()
-        if proj:
-            el_path = proj.data_path("elementos.json")
-            if os.path.exists(el_path):
-                try:
-                    with open(el_path, "r", encoding="utf-8") as f:
-                        el_data = json.load(f)
-                    el_changed = False
-                    for eid, eobj in el_data.items():
-                        props = eobj.get("properties", {})
-                        for pk, pv in props.items():
-                            if isinstance(pv, list):
-                                for drop in pv:
-                                    if isinstance(drop, dict) and drop.get("item") == self._selected_id:
-                                        drop["item"] = new_id
-                                        el_changed = True
-                    if el_changed:
-                        with open(el_path, "w", encoding="utf-8") as f:
-                            json.dump(el_data, f, indent=2, ensure_ascii=False)
-                except Exception:
-                    pass
-            # Update event stack files referencing old item ID
-            stacks_dir = proj.data_path("stacks")
-            if os.path.isdir(stacks_dir):
-                updated_stacks = 0
-                for fname in os.listdir(stacks_dir):
-                    if not fname.endswith(".json"):
-                        continue
-                    fpath = os.path.join(stacks_dir, fname)
-                    try:
-                        with open(fpath, "r", encoding="utf-8") as f:
-                            stack_data = json.load(f)
-                        stack_changed = False
-                        events = stack_data.get("events", [])
-                        for ev in events:
-                            evt_type = ev.get("event", "")
-                            if evt_type in ("give_item", "remove_item"):
-                                params = ev.get("params", {})
-                                if params.get("item_id") == self._selected_id:
-                                    params["item_id"] = new_id
-                                    stack_changed = True
-                        if stack_changed:
-                            with open(fpath, "w", encoding="utf-8") as f:
-                                json.dump(stack_data, f, indent=2, ensure_ascii=False)
-                            updated_stacks += 1
-                    except Exception:
-                        pass
-                if updated_stacks:
-                    print(f"  Actualizados {updated_stacks} archivo(s) de stack")
+        updated = rename_item_with_refs(self._selected_id, new_id, proj)
+        if updated:
+            print(f"  Actualizados {updated} archivo(s) de stack")
         self._selected_id = new_id
         self._dirty = True
         self._select_item(new_id)
@@ -553,63 +488,3 @@ class ItemTab(BasePanel):
             py = self._editor_panel.rect.y + PADDING + 28
             surface.blit(self._sprite_preview_surf, (px, py))
 
-
-
-        pygame.draw.rect(surface, (50, 55, 65), r)
-        pygame.draw.rect(surface, (80, 90, 105), r, 1)
-        txt = fuente.render(label, True, (220, 220, 220))
-        surface.blit(txt, (r.x + 6, r.y + (r.h - txt.get_height()) // 2))
-        pygame.draw.polygon(surface, (160, 170, 180), [
-            (r.x + r.w - 12, r.y + r.h // 2 - 2),
-            (r.x + r.w - 6, r.y + r.h // 2 - 2),
-            (r.x + r.w - 9, r.y + r.h // 2 + 3)
-        ])
-        if self._open:
-            ih = 20
-            vis = min(len(self._filtered), self.MAX_VISIBLE)
-            total_h = vis * ih + 2
-            space_below = surface.get_height() - (r.y + r.h)
-            open_up = total_h > space_below and r.y > total_h
-            dy = r.y - total_h if open_up else r.y + r.h
-            dd_rect = pygame.Rect(r.x, dy, r.w, total_h)
-            if dd_rect.y < 0:
-                dd_rect.y = 0
-            if dd_rect.y + dd_rect.h > surface.get_height():
-                dd_rect.y = surface.get_height() - dd_rect.h
-            has_scroll = len(self._filtered) > self.MAX_VISIBLE
-            sb_w = 10 if has_scroll else 0
-            item_w = r.w - sb_w
-            pygame.draw.rect(surface, (45, 48, 56), dd_rect)
-            pygame.draw.rect(surface, (70, 75, 85), dd_rect, 1)
-            clip = surface.get_clip()
-            surface.set_clip(dd_rect)
-            for i in range(vis):
-                idx = self._scroll_offset + i
-                if idx >= len(self._filtered):
-                    break
-                val, lbl = self._filtered[idx]
-                ir = pygame.Rect(r.x, dy + i * ih, item_w, ih)
-                sel = val == self._selected
-                bg = (60, 65, 78) if sel else (45, 48, 56)
-                pygame.draw.rect(surface, bg, ir)
-                if i < vis - 1:
-                    pygame.draw.line(surface, (70, 75, 85), (ir.x, ir.y + ih), (ir.x + ir.w, ir.y + ih))
-                txt = fuente.render(lbl, True, (200, 200, 200))
-                surface.blit(txt, (ir.x + 6, ir.y + (ih - txt.get_height()) // 2))
-            # Scrollbar
-            if has_scroll:
-                sb_x = r.x + r.w - sb_w
-                track = pygame.Rect(sb_x, dy, sb_w, total_h)
-                pygame.draw.rect(surface, (35, 38, 44), track)
-                total = len(self._filtered)
-                thumb_h = max(12, int(total_h * vis / total))
-                max_scroll = total - vis
-                thumb_y = dy + int((self._scroll_offset / max_scroll) * (total_h - thumb_h)) if max_scroll > 0 else dy
-                thumb = pygame.Rect(sb_x + 1, thumb_y, sb_w - 2, thumb_h)
-                pygame.draw.rect(surface, (100, 110, 125), thumb)
-                pygame.draw.rect(surface, (130, 140, 155), thumb, 1)
-            # Filter hint
-            if self._filter_text:
-                hint = fuente.render(f'"{self._filter_text}" ({len(self._filtered)})', True, (120, 140, 160))
-                surface.blit(hint, (dd_rect.x + 4, dd_rect.y + dd_rect.h - 16))
-            surface.set_clip(clip)

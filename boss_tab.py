@@ -3,8 +3,12 @@ import os
 
 import pygame
 
-from editor.boss_data import create_boss, delete_boss, get_all_bosses, get_boss, set_boss
+from editor.boss_data import get_all_bosses, get_boss, set_boss
 from editor.boss_fight_types import BOSS_FIGHT_TYPES, get_default_phase
+from editor.boss_crud import (
+    create_new_boss, clone_boss, delete_boss_by_id, save_boss,
+    add_phase, delete_phase,
+)
 from editor.panels.base_panel import BasePanel
 from editor.project import get_current_project
 from editor.translation import I18n
@@ -405,56 +409,27 @@ class BossTab(BasePanel):
     def _on_add_phase(self):
         if not self._selected_id:
             return
-        boss = get_boss(self._selected_id)
-        if not boss:
-            return
-        ftype = boss.get("fight_type", "orbital")
-        default = get_default_phase(ftype)
-        phases = boss.get("phases", [])
-        # Set threshold between last phase and 0
-        if phases:
-            last_th = phases[-1].get("hp_threshold", 0.0)
-            default["hp_threshold"] = last_th / 2 if last_th > 0 else 0.0
-        else:
-            default["hp_threshold"] = 0.5
-        boss.setdefault("phases", []).append(default)
-        # Sort by hp_threshold descending
-        boss["phases"] = sorted(boss["phases"], key=lambda p: -p.get("hp_threshold", 0.0))
-        set_boss(self._selected_id, boss)
+        add_phase(self._selected_id)
         self._dirty = True
         self._rebuild_phase_editor()
 
     def _on_new(self):
-        base = "nuevo_boss"
-        bid = base
-        n = 1
-        while bid in get_all_bosses():
-            n += 1
-            bid = f"{base}_{n}"
-        create_boss(bid)
+        bid = create_new_boss()
         self._dirty = True
         self._select_boss(bid)
 
     def _on_clone(self):
         if not self._selected_id:
             return
-        boss = get_boss(self._selected_id)
-        if not boss:
-            return
-        base = self._selected_id + "_copia"
-        bid = base
-        n = 1
-        while bid in get_all_bosses():
-            n += 1
-            bid = f"{base}_{n}"
-        set_boss(bid, copy.deepcopy(boss))
-        self._dirty = True
-        self._select_boss(bid)
+        bid = clone_boss(self._selected_id)
+        if bid:
+            self._dirty = True
+            self._select_boss(bid)
 
     def _on_delete(self):
         if not self._selected_id:
             return
-        delete_boss(self._selected_id)
+        delete_boss_by_id(self._selected_id)
         self._selected_id = None
         self._dirty = True
         self._editor_panel.visible = False
@@ -465,44 +440,46 @@ class BossTab(BasePanel):
         boss = get_boss(self._selected_id)
         if not boss:
             return
-        boss["nombre"] = self._name_input.text if self._name_input.text else self._selected_id
+        fields = {}
+        fields["nombre"] = self._name_input.text if self._name_input.text else self._selected_id
         new_ft = self._ft_selector.get_selected()
         old_ft = boss.get("fight_type", "orbital")
         if new_ft and new_ft != old_ft:
-            boss["fight_type"] = new_ft
-            boss["phases"] = [get_default_phase(new_ft)]
+            fields["fight_type"] = new_ft
+            fields["phases"] = [get_default_phase(new_ft)]
         else:
-            boss["fight_type"] = boss.get("fight_type", "orbital")
+            fields["fight_type"] = boss.get("fight_type", "orbital")
         try:
-            boss["vida_maxima"] = int(self._hp_input.text) if self._hp_input.text else 80
+            fields["vida_maxima"] = int(self._hp_input.text) if self._hp_input.text else 80
         except ValueError:
             pass
         try:
-            boss["proyectiles_necesarios"] = int(self._needed_input.text) if self._needed_input.text else 3
+            fields["proyectiles_necesarios"] = int(self._needed_input.text) if self._needed_input.text else 3
         except ValueError:
             pass
         try:
-            boss["damage_per_cycle"] = int(self._dpc_input.text) if self._dpc_input.text else 20
+            fields["damage_per_cycle"] = int(self._dpc_input.text) if self._dpc_input.text else 20
         except ValueError:
             pass
-        boss["icono"] = self._icon_input.text if self._icon_input.text else "?"
-        boss["sprite_sheet"] = self._sprite_selector.get_selected() or ""
+        fields["icono"] = self._icon_input.text if self._icon_input.text else "?"
+        fields["sprite_sheet"] = self._sprite_selector.get_selected() or ""
         try:
-            boss["sprite_rows"] = int(self._sprite_rows_input.text or "1")
-            boss["sprite_cols"] = int(self._sprite_cols_input.text or "1")
+            fields["sprite_rows"] = int(self._sprite_rows_input.text or "1")
+            fields["sprite_cols"] = int(self._sprite_cols_input.text or "1")
         except ValueError:
-            boss["sprite_rows"] = 1
-            boss["sprite_cols"] = 1
+            fields["sprite_rows"] = 1
+            fields["sprite_cols"] = 1
         try:
-            boss["sprite_frame_w"] = int(self._sprite_fw_input.text or "0")
-            boss["sprite_frame_h"] = int(self._sprite_fh_input.text or "0")
+            fields["sprite_frame_w"] = int(self._sprite_fw_input.text or "0")
+            fields["sprite_frame_h"] = int(self._sprite_fh_input.text or "0")
         except ValueError:
-            boss["sprite_frame_w"] = 0
-            boss["sprite_frame_h"] = 0
+            fields["sprite_frame_w"] = 0
+            fields["sprite_frame_h"] = 0
         try:
-            boss["sprite_interval"] = int(self._sprite_interval_input.text or "0")
+            fields["sprite_interval"] = int(self._sprite_interval_input.text or "0")
         except ValueError:
-            boss["sprite_interval"] = 0
+            fields["sprite_interval"] = 0
+        boss.update(fields)
         self._sync_phase_inputs(boss)
         set_boss(self._selected_id, boss)
         self._dirty = False
