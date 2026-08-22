@@ -86,13 +86,15 @@ def rename_element(old_id, new_id):
     return True
 
 
-def create_element(element_id, sprite_id, name, behavior, properties=None):
+def create_element(element_id, sprite_id, name, behavior, properties=None, tileset_idx=None):
     data = {
         "sprite_id": sprite_id,
         "name": name,
         "behavior": behavior,
-        "properties": properties or {}
+        "properties": properties or {},
     }
+    if tileset_idx is not None:
+        data["tileset_idx"] = tileset_idx
     set_element(element_id, data)
     return data
 
@@ -104,7 +106,31 @@ def get_element_name(element_id):
 
 def get_element_sprite_id(element_id):
     el = get_element(element_id)
-    return el.get("sprite_id") if el else None
+    if not el:
+        return None
+    # If element has tileset_idx, return special format for tileset rendering
+    if "tileset_idx" in el:
+        return f"tileset:{el['tileset_idx']}"
+    return el.get("sprite_id")
+
+
+def get_element_tileset_idx(element_id):
+    el = get_element(element_id)
+    if el and "tileset_idx" in el:
+        return el["tileset_idx"]
+    return None
+
+
+def set_element_tileset_idx(element_id, tileset_idx):
+    el = get_element(element_id)
+    if not el:
+        return False
+    if tileset_idx is not None:
+        el["tileset_idx"] = tileset_idx
+    else:
+        el.pop("tileset_idx", None)
+    set_element(element_id, el)
+    return True
 
 
 def get_element_behavior(element_id):

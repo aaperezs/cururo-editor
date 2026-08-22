@@ -10,6 +10,14 @@ STATE_NEW = 1
 
 PLATFORMS = [("desktop", "Escritorio"), ("mobile", "Movil")]
 QUALITIES = [("low", "Baja"), ("medium", "Media"), ("high", "Alta")]
+TILE_SIZES = [16, 20, 24, 32]
+PIXEL_SCALES = [1, 2, 3]
+RES_SUGGESTED = {
+    16: ["640x480", "800x600", "960x720"],
+    20: ["800x600", "960x720"],
+    24: ["960x720", "1200x900"],
+    32: ["960x720", "1280x960"],
+}
 _re_res = re.compile(r"^\d+x\d+$")
 
 
@@ -24,7 +32,7 @@ class ProjectDialog:
         self.font = None
         self.font_b = None
         self.font_title = None
-        self.W, self.H = 560, 660
+        self.W, self.H = 560, 780
         self.ITEM_H = 40
         self.done = False
         self.result = None
@@ -39,6 +47,12 @@ class ProjectDialog:
         self._selected_qual_idx = 1
         self._new_title = ""
         self._new_res = "800x600"
+        self._selected_tile_idx = 1  # 20px (default)
+        self._selected_res_idx = 0
+        self._selected_scale_idx = 0  # 1x
+        self._tileset_enabled = False
+        self._tileset_path = None
+        self._warn_msg = ""
         self._cursor_visible = True
         self._cursor_timer = 0
         self._error_msg = ""
@@ -100,10 +114,17 @@ class ProjectDialog:
         plat_start_y = tpl_start_y + len(self._available_templates) * tpl_h + 14
         opt_h = 22
         qual_start_y = plat_start_y + len(PLATFORMS) * opt_h + 14
-        title_label_y = qual_start_y + len(QUALITIES) * opt_h + 10
-        res_label_y = title_label_y + 20
-        res_input_y = res_label_y + 18
-        title_input_y = res_input_y + 22
+        tile_label_y = qual_start_y + len(QUALITIES) * opt_h + 12
+        tile_opt_y = tile_label_y + 18
+        res_label_y = tile_opt_y + 24
+        res_opt_y = res_label_y + 18
+        res_input_y = res_opt_y + 24
+        scale_label_y = res_input_y + 24
+        scale_opt_y = scale_label_y + 18
+        tileset_label_y = scale_opt_y + 24
+        tileset_row_y = tileset_label_y + 18
+        title_label_y = tileset_row_y + 26
+        title_input_y = title_label_y + 18
         btn_y = self.H - 100
         return {
             "name_input": pygame.Rect(40, 86, self.W - 80, 28),
@@ -113,9 +134,18 @@ class ProjectDialog:
             "tpl_h": tpl_h,
             "plat_start": plat_start_y,
             "qual_start": qual_start_y,
-            "title_label": title_label_y,
+            "tile_label": tile_label_y,
+            "tile_opt": pygame.Rect(40, tile_opt_y, self.W - 80, 20),
             "res_label": res_label_y,
-            "res_input": pygame.Rect(40, res_input_y, self.W - 80, 26),
+            "res_opt": pygame.Rect(40, res_opt_y, self.W - 80, 20),
+            "res_input": pygame.Rect(200, res_input_y, self.W - 240, 26),
+            "scale_label": scale_label_y,
+            "scale_opt": pygame.Rect(40, scale_opt_y, self.W - 80, 20),
+            "tileset_label": tileset_label_y,
+            "tileset_check": pygame.Rect(40, tileset_row_y, 18, 18),
+            "tileset_btn": pygame.Rect(66, tileset_row_y - 2, 130, 22),
+            "tileset_path": pygame.Rect(204, tileset_row_y - 2, self.W - 244, 22),
+            "title_label": title_label_y,
             "title_input": pygame.Rect(40, title_input_y, self.W - 80, 26),
             "btn_y": btn_y,
             "create_btn": pygame.Rect(self.W // 2 - 60, btn_y, 120, 34),
@@ -123,12 +153,40 @@ class ProjectDialog:
         }
 
     def _next_focus(self):
-        order = ["name", "category", "template", "platform", "quality", "resolution", "title"]
+        order = ["name", "category", "template", "platform", "quality", "tile", "resolution", "scale", "tileset", "title"]
         return order[(order.index(self._focus) + 1) % len(order)]
 
     def _prev_focus(self):
-        order = ["name", "category", "template", "platform", "quality", "resolution", "title"]
+        order = ["name", "category", "template", "platform", "quality", "tile", "resolution", "scale", "tileset", "title"]
         return order[(order.index(self._focus) - 1) % len(order)]
+
+    def _recalc_res_sugeridas(self):
+        """Al cambiar tile size, recalcula las resoluciones sugeridas."""
+        ts = TILE_SIZES[self._selected_tile_idx]
+        sugeridas = RES_SUGGESTED[ts]
+        if self._new_res in sugeridas:
+            self._selected_res_idx = sugeridas.index(self._new_res)
+        else:
+            self._selected_res_idx = 0
+            self._new_res = sugeridas[0]
+
+    def _pick_tileset(self):
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.update()
+        try:
+            path = filedialog.askopenfilename(
+                title="Seleccionar tileset (PNG)",
+                filetypes=[("PNG", "*.png"), ("Imágenes", "*.png *.jpg *.bmp")],
+            )
+        finally:
+            root.destroy()
+        if path:
+            self._tileset_path = path
+            self._tileset_enabled = True
 
     def _input_key(self, event):
         if event.key == pygame.K_RETURN:
@@ -142,9 +200,17 @@ class ProjectDialog:
             elif self._focus == "platform":
                 self._focus = "quality"
             elif self._focus == "quality":
+                self._focus = "tile"
+            elif self._focus == "tile":
                 self._focus = "resolution"
             elif self._focus == "resolution":
-                self._focus = "title"
+                self._focus = "scale"
+            elif self._focus == "scale":
+                self._focus = "tileset"
+            elif self._focus == "tileset":
+                self._tileset_enabled = not self._tileset_enabled
+                if self._tileset_enabled and not self._tileset_path:
+                    self._pick_tileset()
             elif self._focus == "title":
                 return self._do_create()
             return True
@@ -168,6 +234,18 @@ class ProjectDialog:
                 self._selected_plat_idx = max(0, self._selected_plat_idx - 1)
             elif self._focus == "quality":
                 self._selected_qual_idx = max(0, self._selected_qual_idx - 1)
+            elif self._focus == "tile":
+                self._selected_tile_idx = max(0, self._selected_tile_idx - 1)
+                self._recalc_res_sugeridas()
+            elif self._focus == "resolution":
+                self._selected_res_idx = max(0, self._selected_res_idx - 1)
+                self._new_res = RES_SUGGESTED[TILE_SIZES[self._selected_tile_idx]][self._selected_res_idx]
+            elif self._focus == "scale":
+                self._selected_scale_idx = max(0, self._selected_scale_idx - 1)
+            elif self._focus == "tileset":
+                self._tileset_enabled = not self._tileset_enabled
+                if self._tileset_enabled and not self._tileset_path:
+                    self._pick_tileset()
             return True
         if event.key == pygame.K_DOWN:
             if self._focus == "category":
@@ -180,6 +258,19 @@ class ProjectDialog:
                 self._selected_plat_idx = min(len(PLATFORMS) - 1, self._selected_plat_idx + 1)
             elif self._focus == "quality":
                 self._selected_qual_idx = min(len(QUALITIES) - 1, self._selected_qual_idx + 1)
+            elif self._focus == "tile":
+                self._selected_tile_idx = min(len(TILE_SIZES) - 1, self._selected_tile_idx + 1)
+                self._recalc_res_sugeridas()
+            elif self._focus == "resolution":
+                sugeridas = RES_SUGGESTED[TILE_SIZES[self._selected_tile_idx]]
+                self._selected_res_idx = min(len(sugeridas) - 1, self._selected_res_idx + 1)
+                self._new_res = sugeridas[self._selected_res_idx]
+            elif self._focus == "scale":
+                self._selected_scale_idx = min(len(PIXEL_SCALES) - 1, self._selected_scale_idx + 1)
+            elif self._focus == "tileset":
+                self._tileset_enabled = not self._tileset_enabled
+                if self._tileset_enabled and not self._tileset_path:
+                    self._pick_tileset()
             return True
         if event.key == pygame.K_BACKSPACE:
             if self._focus == "name":
@@ -194,6 +285,9 @@ class ProjectDialog:
                     self._new_name += event.unicode
                 elif self._focus == "resolution" and len(self._new_res) < 12:
                     self._new_res += event.unicode
+                    ts = TILE_SIZES[self._selected_tile_idx]
+                    if self._new_res in RES_SUGGESTED[ts]:
+                        self._selected_res_idx = RES_SUGGESTED[ts].index(self._new_res)
                 elif self._focus == "title" and len(self._new_title) < 60:
                     self._new_title += event.unicode
         return True
@@ -240,6 +334,30 @@ class ProjectDialog:
             self._focus = "resolution"
             return
 
+        if L["tile_opt"].collidepoint(mx, my):
+            self._focus = "tile"
+            return
+
+        if L["res_opt"].collidepoint(mx, my):
+            self._focus = "resolution"
+            return
+
+        if L["scale_opt"].collidepoint(mx, my):
+            self._focus = "scale"
+            return
+
+        if L["tileset_check"].collidepoint(mx, my):
+            self._tileset_enabled = not self._tileset_enabled
+            if self._tileset_enabled and not self._tileset_path:
+                self._pick_tileset()
+            self._focus = "tileset"
+            return
+
+        if L["tileset_btn"].collidepoint(mx, my):
+            self._pick_tileset()
+            self._focus = "tileset"
+            return
+
         if L["title_input"].collidepoint(mx, my):
             self._focus = "title"
             return
@@ -276,6 +394,13 @@ class ProjectDialog:
             self._error_msg = "Resolucion invalida (formato WxH, ej. 1280x720)"
             self._focus = "resolution"
             return True
+        tile_size = TILE_SIZES[self._selected_tile_idx]
+        rw, rh = (int(p) for p in res.split("x"))
+        if rw % tile_size != 0 or rh % tile_size != 0:
+            self._warn_msg = (f"Resolucion {res} no es multiplo de tile size "
+                              f"({tile_size}px): se usara letterbox")
+        else:
+            self._warn_msg = ""
         tpl = self._available_templates[self._selected_tpl_idx]
         platform = PLATFORMS[self._selected_plat_idx][0]
         quality = QUALITIES[self._selected_qual_idx][0]
@@ -287,9 +412,16 @@ class ProjectDialog:
         while os.path.exists(path):
             path = f"{base}_{n}"
             n += 1
+        graphics_config = {
+            "tile_size": tile_size,
+            "resolution": [rw, rh],
+            "pixel_art_scale": PIXEL_SCALES[self._selected_scale_idx],
+            "tileset": self._tileset_path if self._tileset_enabled else None,
+        }
         result = create_project(tpl["id"], name, path,
                                 platform=platform, quality=quality,
-                                window_title=title, resolution=res)
+                                window_title=title, resolution=res,
+                                graphics_config=graphics_config)
         if result:
             self.result = {"path": result, "name": name, "id": safe}
             self.done = True
@@ -330,6 +462,12 @@ class ProjectDialog:
                                 self._new_name = ""
                                 self._new_title = ""
                                 self._new_res = "800x600"
+                                self._selected_tile_idx = 1
+                                self._selected_res_idx = 0
+                                self._selected_scale_idx = 0
+                                self._tileset_enabled = False
+                                self._tileset_path = None
+                                self._warn_msg = ""
                                 self._error_msg = ""
                                 self._focus = "name"
                             elif self.selected_index == total - 1:
@@ -349,6 +487,12 @@ class ProjectDialog:
                             self._new_name = ""
                             self._new_title = ""
                             self._new_res = "800x600"
+                            self._selected_tile_idx = 1
+                            self._selected_res_idx = 0
+                            self._selected_scale_idx = 0
+                            self._tileset_enabled = False
+                            self._tileset_path = None
+                            self._warn_msg = ""
                             self._error_msg = ""
                             self._focus = "name"
                         for i, p in enumerate(self.projects):
@@ -441,6 +585,17 @@ class ProjectDialog:
         txt = self.font.render(label, True, (200, 210, 220))
         screen.blit(txt, (x + 10, y + 2))
 
+    def _draw_opt_single(self, screen, rect, label, focus):
+        """Dropdown de una fila (valor actual + hint de flechas)."""
+        bg = (55, 70, 90) if focus else (42, 55, 70)
+        pygame.draw.rect(screen, bg, rect)
+        if focus:
+            pygame.draw.rect(screen, (70, 160, 220), (rect.x, rect.y, 3, rect.height))
+        txt = self.font.render(label, True, (200, 210, 220))
+        screen.blit(txt, (rect.x + 10, rect.y + 2))
+        hint = self.font_small.render("\u2191\u2193", True, (120, 140, 160))
+        screen.blit(hint, (rect.right - 24, rect.y + 3))
+
     def _draw_new(self, screen):
         L = self._layout_new()
         title = self.font_title.render("Nuevo Proyecto", True, (200, 210, 220))
@@ -449,6 +604,9 @@ class ProjectDialog:
         if self._error_msg:
             err = self.font.render(self._error_msg, True, (220, 80, 80))
             screen.blit(err, (self.W // 2 - err.get_width() // 2, 44))
+        elif self._warn_msg:
+            warn = self.font.render(self._warn_msg, True, (220, 190, 90))
+            screen.blit(warn, (self.W // 2 - warn.get_width() // 2, 44))
 
         lbl = self.font.render("Nombre del proyecto:", True, (180, 190, 200))
         screen.blit(lbl, (40, 64))
@@ -526,8 +684,21 @@ class ProjectDialog:
                            i, self._selected_qual_idx,
                            self._focus == "quality", self.W - 80)
 
-        title_lbl = self.font.render("Resolucion base (WxH):", True, (180, 190, 200))
-        screen.blit(title_lbl, (40, L["res_label"]))
+        # ── Configuración gráfica ──
+        tile_lbl = self.font.render("Tile size (px):", True, (180, 190, 200))
+        screen.blit(tile_lbl, (40, L["tile_label"]))
+        self._draw_opt_single(screen, L["tile_opt"],
+                              f"{TILE_SIZES[self._selected_tile_idx]} px",
+                              self._focus == "tile")
+
+        res_lbl = self.font.render("Resolucion sugerida:", True, (180, 190, 200))
+        screen.blit(res_lbl, (40, L["res_label"]))
+        sugeridas = RES_SUGGESTED[TILE_SIZES[self._selected_tile_idx]]
+        self._draw_opt_single(screen, L["res_opt"], sugeridas[self._selected_res_idx],
+                              self._focus == "resolution")
+
+        res_lbl2 = self.font.render("Resolucion base (WxH):", True, (180, 190, 200))
+        screen.blit(res_lbl2, (40, L["res_input"].top + 4))
         r_rect = L["res_input"]
         r_color = (70, 130, 200) if self._focus == "resolution" else (60, 65, 75)
         pygame.draw.rect(screen, (50, 55, 65), r_rect)
@@ -537,6 +708,34 @@ class ProjectDialog:
             display_res += "|"
         r_txt = self.font.render(display_res, True, (220, 220, 220))
         screen.blit(r_txt, (r_rect.x + 6, r_rect.y + 4))
+
+        scale_lbl = self.font.render("Pixel art scale:", True, (180, 190, 200))
+        screen.blit(scale_lbl, (40, L["scale_label"]))
+        self._draw_opt_single(screen, L["scale_opt"],
+                              f"{PIXEL_SCALES[self._selected_scale_idx]}x",
+                              self._focus == "scale")
+
+        ts_lbl = self.font.render("Tileset:", True, (180, 190, 200))
+        screen.blit(ts_lbl, (40, L["tileset_label"]))
+        check = L["tileset_check"]
+        pygame.draw.rect(screen, (50, 55, 65), check)
+        pygame.draw.rect(screen, (70, 130, 200) if self._focus == "tileset" else (60, 65, 75), check, 2)
+        if self._tileset_enabled:
+            pygame.draw.line(screen, (140, 200, 120), (check.x + 3, check.y + 9),
+                             (check.x + 7, check.y + 13), 2)
+            pygame.draw.line(screen, (140, 200, 120), (check.x + 7, check.y + 13),
+                             (check.x + 15, check.y + 4), 2)
+        btn = L["tileset_btn"]
+        pygame.draw.rect(screen, (55, 70, 90), btn)
+        pygame.draw.rect(screen, (70, 130, 200), btn, 1)
+        btn_txt = self.font.render("Seleccionar...", True, (200, 210, 220))
+        screen.blit(btn_txt, (btn.x + 8, btn.y + 3))
+        path_rect = L["tileset_path"]
+        pygame.draw.rect(screen, (45, 48, 55), path_rect)
+        path_txt = self.font_small.render(
+            os.path.basename(self._tileset_path) if self._tileset_enabled and self._tileset_path else "(sin tileset)",
+            True, (150, 160, 170))
+        screen.blit(path_txt, (path_rect.x + 6, path_rect.y + 4))
 
         title_lbl = self.font.render("Titulo de ventana (opcional):", True, (180, 190, 200))
         screen.blit(title_lbl, (40, L["title_label"]))
@@ -568,4 +767,4 @@ class ProjectDialog:
             "TAB: cambiar foco  ESC: volver  Enter: crear  \u2191\u2193: opciones",
             True, (100, 110, 120))
         screen.blit(hint, (self.W // 2 - hint.get_width() // 2,
-                           L["title_input"].bottom + 14))
+                           L["cancel_btn"].bottom + 10))

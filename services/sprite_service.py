@@ -37,7 +37,7 @@ class SpriteService:
     def load_surface(sprite_id):
         info = get_sprite_registry().get(sprite_id)
         if info and info.get("file"):
-            from utils.sprite_manager import obtener as load_sprite
+            from editor.common.sprite_loader import obtener as load_sprite
             return load_sprite(info["file"])
         return None
 

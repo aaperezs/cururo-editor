@@ -11,7 +11,7 @@ from editor.widgets.button import Button
 from editor.widgets.label import Label
 from editor.widgets.panel import Panel
 from editor.widgets.text_input import TextInput
-from utils.sprite_manager import obtener as obtener_sprite
+from editor.common.sprite_loader import obtener as obtener_sprite
 
 PADDING = 6
 TOOLBAR_H = 36

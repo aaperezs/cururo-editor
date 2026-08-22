@@ -9,15 +9,19 @@ from editor.widgets.panel import Panel
 from editor.widgets.event_editor_widget import EventEditorWidget, COL_BORDER, COL_ACCENT, COL_FIELD_BG
 from editor.sprite_map import get_sprite_file
 from editor.project import get_current_project
-from levels.level_parser import LevelParser
-from levels.level_manager import RUTA_MAPAS
-from configs.constants import TAMANO_CELDA
+from editor.common.parser import CHAR_MAP, parsear_mapa
+from editor.common.sprite_loader import obtener as obtener_sprite
 
 
 def _stacks_dir():
     p = get_current_project()
     return p.stacks_path() if p else ""
-CHAR_MAP_REVERSE = {v: k for k, v in LevelParser.CHAR_MAP.items() if v is not None}
+CHAR_MAP_REVERSE = {v: k for k, v in CHAR_MAP.items() if v is not None}
+
+
+def _maps_dir():
+    p = get_current_project()
+    return p.maps_path() if p else ""
 
 
 class EventEditorPanel(BasePanel):
@@ -75,7 +79,7 @@ class EventEditorPanel(BasePanel):
         root = tk.Tk()
         root.withdraw()
         path = filedialog.askopenfilename(
-            initialdir=RUTA_MAPAS,
+            initialdir=_maps_dir(),
             title=self.i18n.t("map.open"),
             filetypes=[("Map files", "*.txt")]
         )
@@ -88,19 +92,21 @@ class EventEditorPanel(BasePanel):
             self._load_stacks(map_id)
 
     def _load_map(self, map_id):
-        path = os.path.join(RUTA_MAPAS, f"{map_id}.txt")
+        path = os.path.join(_maps_dir(), f"{map_id}.txt")
         try:
             with open(path, "r", encoding="utf-8") as f:
                 text = f.read()
-            parsed = LevelParser.parsear_mapa(text)
+            parsed = parsear_mapa(text)
             self._grid_data = {}
             lines = [l.rstrip() for l in text.split("\n") if l.strip() and not l.startswith("# ")]
             for y, line in enumerate(lines):
                 for x, char in enumerate(line):
-                    if char in LevelParser.CHAR_MAP and LevelParser.CHAR_MAP[char] is not None:
+                    if char in CHAR_MAP and CHAR_MAP[char] is not None:
                         self._grid_data[(x, y)] = char
-            self._map_ancho = parsed["ancho"] // TAMANO_CELDA
-            self._map_alto = parsed["alto"] // TAMANO_CELDA
+            p = get_current_project()
+            base_ts = p.tile_size if p else 20
+            self._map_ancho = parsed["ancho"] // base_ts
+            self._map_alto = parsed["alto"] // base_ts
         except FileNotFoundError:
             self._grid_data = {}
             self._map_ancho = 0
@@ -221,11 +227,10 @@ class EventEditorPanel(BasePanel):
         for (gx, gy), char in self._grid_data.items():
             sx = mm_rect.x + gx * tile_size
             sy = mm_rect.y + gy * tile_size
-            tipo = LevelParser.CHAR_MAP.get(char)
+            tipo = CHAR_MAP.get(char)
             if tipo:
                 sprite = None
                 try:
-                    from utils.sprite_manager import obtener as obtener_sprite
                     sprite_file = get_sprite_file(tipo)
                     sprite = obtener_sprite(sprite_file) if sprite_file else None
                 except Exception:

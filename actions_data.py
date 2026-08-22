@@ -32,6 +32,8 @@ ACCIONES = {
     "play_sfx": ("Reproducir SFX", [("asset_id", "Asset", "text", "")]),
     "set_bgm_volume": ("Volumen BGM", [("volumen", "Volumen", "float", 1.0)]),
     "set_sfx_volume": ("Volumen SFX", [("volumen", "Volumen", "float", 1.0)]),
+    "set_resolution": ("Cambiar resolución", [("ancho", "Ancho", "int", 800), ("alto", "Alto", "int", 600)]),
+    "set_volume": ("Cambiar volumen", [("volumen", "Volumen", "float", 1.0)]),
     "iniciar_minijuego": ("Iniciar minijuego", [("minijuego_id", "Minijuego", "text", "")]),
     "ir_a_escena": ("Ir a escena", [("capitulo", "Capítulo", "int", 0), ("escena", "Escena", "int", 0)]),
     "cambiar_fondo": ("Cambiar fondo", [("sprite_id", "Sprite", "text", ""), ("modo", "Modo", "text", "fill")]),

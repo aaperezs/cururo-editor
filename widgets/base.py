@@ -37,6 +37,9 @@ class Widget:
         self.rect.w = w
         self.rect.h = h
 
+    def layout(self):
+        pass
+
 
 class Container(Widget):
     def __init__(self, x=0, y=0, w=0, h=0):
@@ -46,11 +49,17 @@ class Container(Widget):
     def add(self, child):
         child.parent = self
         self.children.append(child)
+        self.layout()
+        if self.parent is not None and hasattr(self.parent, 'layout'):
+            self.parent.layout()
 
     def remove(self, child):
         if child in self.children:
             child.parent = None
             self.children.remove(child)
+            self.layout()
+            if self.parent is not None and hasattr(self.parent, 'layout'):
+                self.parent.layout()
 
     def clear(self):
         for c in self.children:

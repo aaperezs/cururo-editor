@@ -150,6 +150,8 @@ PANEL_CLASSES = {
 }
 
 MENUBAR_H = 26
+MIN_W = 720
+MIN_H = 560
 
 
 def _work_area():
@@ -258,307 +260,15 @@ class EditorApp:
         self.menu.get_active_panel()
 
     def nuevo_proyecto(self):
-        import pygame
-        from editor.project import create_project, list_templates, set_current_project
+        """Abre el diálogo de nuevo proyecto usando ProjectDialog."""
+        from editor.project_dialog import ProjectDialog
+        from editor.project import set_current_project
         from editor.elements import _load_elements
         from editor.behaviors import _load as _load_behaviors
-        from editor.categories import get_all_categories
 
-        all_categories = get_all_categories()
-        templates = list_templates()
-        if not all_categories or not templates:
-            return
-
-        PLATFORMS = [("desktop", "Escritorio"), ("mobile", "Movil")]
-        QUALITIES = [("low", "Baja"), ("medium", "Media"), ("high", "Alta")]
-
-        name = ""
-        title = ""
-        sel_cat_idx = 0
-        sel_tpl_idx = 0
-        sel_plat_idx = 0
-        sel_qual_idx = 1
-        error = ""
-        done = False
-        result_path = None
-        focus = "name"
-
-        def _templates_for_cat():
-            cat_id = all_categories[sel_cat_idx]["id"]
-            return [t for t in templates if t.get("category") == cat_id]
-
-        font = self.i18n.fuente(16)
-        font_b = self.i18n.fuente(16, bold=True)
-        font_small = self.i18n.fuente(12)
-
-        dialog_w, dialog_h = 450, 560
-        dx = (self.ancho - dialog_w) // 2
-        dy = (self.alto - dialog_h) // 2
-        top = dy
-
-        cat_start = top + 146
-        cat_h = 30
-        tpl_start = cat_start + len(all_categories) * cat_h + 16
-        tpl_h = 24
-        opt_h = 22
-        plat_start = tpl_start + 24 + 12
-        qual_start = plat_start + len(PLATFORMS) * opt_h + 12
-        title_label = qual_start + len(QUALITIES) * opt_h + 14
-        title_input_y = title_label + 22
-
-        cx_center = self.ancho // 2
-        create_btn = pygame.Rect(0, 0, 110, 30)
-        create_btn.center = (cx_center - 60, dy + dialog_h - 50)
-        cancel_btn = pygame.Rect(0, 0, 110, 30)
-        cancel_btn.center = (cx_center + 60, dy + dialog_h - 50)
-
-        _order = ["name", "cat", "template", "platform", "quality", "title"]
-
-        def _next_focus():
-            return _order[(_order.index(focus) + 1) % len(_order)]
-
-        def _prev_focus():
-            return _order[(_order.index(focus) - 1) % len(_order)]
-
-        def _do_create():
-            nonlocal result_path, done, error
-            if not name.strip():
-                error = "El nombre no puede estar vacio"
-                return
-            available = _templates_for_cat()
-            if not available:
-                error = "Sin plantillas para esta categoria"
-                return
-            tpl = available[sel_tpl_idx]
-            safe = name.strip().lower().replace(" ", "_").replace("-", "_")
-            search_dir = _default_projects_dir()
-            path = os.path.join(search_dir, safe)
-            n = 1
-            while os.path.exists(path):
-                path = os.path.join(search_dir, f"{safe}_{n}")
-                n += 1
-            r = create_project(
-                tpl["id"], name.strip(), path,
-                platform=PLATFORMS[sel_plat_idx][0],
-                quality=QUALITIES[sel_qual_idx][0],
-                window_title=title.strip() or None,
-            )
-            if r:
-                result_path = r
-                done = True
-            else:
-                error = "Error al crear proyecto"
-
-        while not done:
-            for event in pygame.event.get([pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN, pygame.QUIT]):
-                if event.type == pygame.QUIT:
-                    return
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        if focus == "name":
-                            done = True
-                            result_path = None
-                        else:
-                            focus = _prev_focus()
-                    elif event.key == pygame.K_RETURN:
-                        if focus == "name":
-                            if name.strip():
-                                focus = "cat"
-                        elif focus == "cat":
-                            focus = "template"
-                        elif focus == "template":
-                            focus = "platform"
-                        elif focus == "platform":
-                            focus = "quality"
-                        elif focus == "quality":
-                            focus = "title"
-                        elif focus == "title":
-                            _do_create()
-                    elif event.key == pygame.K_TAB:
-                        focus = _next_focus()
-                    elif event.key == pygame.K_UP:
-                        if focus == "cat":
-                            sel_cat_idx = max(0, sel_cat_idx - 1)
-                            sel_tpl_idx = 0
-                        elif focus == "template":
-                            sel_tpl_idx = max(0, sel_tpl_idx - 1)
-                        elif focus == "platform":
-                            sel_plat_idx = max(0, sel_plat_idx - 1)
-                        elif focus == "quality":
-                            sel_qual_idx = max(0, sel_qual_idx - 1)
-                    elif event.key == pygame.K_DOWN:
-                        if focus == "cat":
-                            sel_cat_idx = min(len(all_categories) - 1, sel_cat_idx + 1)
-                            sel_tpl_idx = 0
-                        elif focus == "template":
-                            available = _templates_for_cat()
-                            sel_tpl_idx = min(len(available) - 1, sel_tpl_idx + 1)
-                        elif focus == "platform":
-                            sel_plat_idx = min(len(PLATFORMS) - 1, sel_plat_idx + 1)
-                        elif focus == "quality":
-                            sel_qual_idx = min(len(QUALITIES) - 1, sel_qual_idx + 1)
-                    elif event.key == pygame.K_BACKSPACE:
-                        if focus == "name":
-                            name = name[:-1]
-                        elif focus == "title":
-                            title = title[:-1]
-                    elif event.unicode:
-                        if focus == "name" and len(name) < 40:
-                            name += event.unicode
-                        elif focus == "title" and len(title) < 60:
-                            title += event.unicode
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    mx, my = event.pos
-                    input_rect = pygame.Rect(0, 0, 300, 30)
-                    input_rect.center = (cx_center, top + 100)
-                    if input_rect.collidepoint(mx, my):
-                        focus = "name"
-                    for i, cat in enumerate(all_categories):
-                        ry = cat_start + i * cat_h
-                        if dx + 30 <= mx <= dx + dialog_w - 30 and ry <= my <= ry + cat_h - 2:
-                            sel_cat_idx = i
-                            sel_tpl_idx = 0
-                            focus = "cat"
-                    available = _templates_for_cat()
-                    for i, tpl in enumerate(available):
-                        ry = tpl_start + i * tpl_h
-                        if dx + 30 <= mx <= dx + dialog_w - 30 and ry <= my <= ry + tpl_h - 2:
-                            sel_tpl_idx = i
-                            focus = "template"
-                    for i, plat in enumerate(PLATFORMS):
-                        ry = plat_start + i * opt_h
-                        if dx + 30 <= mx <= dx + dialog_w - 30 and ry <= my <= ry + opt_h - 2:
-                            sel_plat_idx = i
-                            focus = "platform"
-                    for i, qual in enumerate(QUALITIES):
-                        ry = qual_start + i * opt_h
-                        if dx + 30 <= mx <= dx + dialog_w - 30 and ry <= my <= ry + opt_h - 2:
-                            sel_qual_idx = i
-                            focus = "quality"
-                    t_input = pygame.Rect(dx + 40, title_input_y, dialog_w - 80, 26)
-                    if t_input.collidepoint(mx, my):
-                        focus = "title"
-                    if create_btn.collidepoint(mx, my) and name.strip():
-                        _do_create()
-                    if cancel_btn.collidepoint(mx, my):
-                        done = True
-                        result_path = None
-
-            overlay = pygame.Surface((self.ancho, self.alto), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 180))
-            self.screen.blit(overlay, (0, 0))
-
-            pygame.draw.rect(self.screen, (40, 44, 52), (dx, dy, dialog_w, dialog_h))
-            pygame.draw.rect(self.screen, (60, 65, 75), (dx, dy, dialog_w, dialog_h), 2)
-
-            dialog_title = font_b.render("Nuevo Proyecto", True, (200, 210, 220))
-            self.screen.blit(dialog_title, (cx_center - dialog_title.get_width() // 2, dy + 16))
-
-            if error:
-                err = font.render(error, True, (220, 80, 80))
-                self.screen.blit(err, (cx_center - err.get_width() // 2, dy + 44))
-
-            lbl = font.render("Nombre:", True, (180, 190, 200))
-            self.screen.blit(lbl, (dx + 30, top + 64))
-
-            input_rect = pygame.Rect(0, 0, 300, 30)
-            input_rect.center = (cx_center, top + 100)
-            border_c = (70, 130, 200) if focus == "name" else (60, 65, 75)
-            pygame.draw.rect(self.screen, (50, 55, 65), input_rect)
-            pygame.draw.rect(self.screen, border_c, input_rect, 2)
-            display = name + ("|" if focus == "name" and pygame.time.get_ticks() % 600 < 300 else " ")
-            txt = font.render(display, True, (220, 220, 220))
-            self.screen.blit(txt, (input_rect.x + 6, input_rect.y + 4))
-
-            cat_lbl = font_small.render("Categoria:", True, (150, 170, 200))
-            self.screen.blit(cat_lbl, (dx + 30, cat_start - 18))
-
-            for i, cat in enumerate(all_categories):
-                ry = cat_start + i * cat_h
-                sel = i == sel_cat_idx
-                fcs = focus == "cat" and sel
-                bg = (55, 70, 90) if fcs else (42, 55, 70)
-                pygame.draw.rect(self.screen, bg, (dx + 30, ry, dialog_w - 60, cat_h - 2))
-                if fcs:
-                    pygame.draw.rect(self.screen, (70, 160, 220), (dx + 30, ry, 3, cat_h - 2))
-                elif sel:
-                    pygame.draw.rect(self.screen, (50, 100, 140), (dx + 30, ry, 3, cat_h - 2))
-                cname = font_small.render(cat["name"], True, (200, 210, 220))
-                self.screen.blit(cname, (dx + 40, ry + 4))
-
-            tpl_lbl = font_small.render("Plantilla:", True, (150, 170, 200))
-            self.screen.blit(tpl_lbl, (dx + 30, tpl_start - 18))
-
-            available = _templates_for_cat()
-            if not available:
-                no_tpl = font_small.render("(sin plantillas)", True, (120, 130, 140))
-                self.screen.blit(no_tpl, (dx + 40, tpl_start))
-            else:
-                for i, tpl in enumerate(available):
-                    ry = tpl_start + i * tpl_h
-                    sel = i == sel_tpl_idx
-                    fcs = focus == "template" and sel
-                    bg = (55, 60, 72) if fcs else (45, 48, 55)
-                    pygame.draw.rect(self.screen, bg, (dx + 30, ry, dialog_w - 60, tpl_h - 2))
-                    if fcs:
-                        pygame.draw.rect(self.screen, (70, 130, 200), (dx + 30, ry, 3, tpl_h - 2))
-                    tname = font_small.render(tpl["name"], True, (180, 200, 230))
-                    self.screen.blit(tname, (dx + 40, ry + 2))
-
-            plat_lbl = font_small.render("Plataforma:", True, (150, 170, 200))
-            self.screen.blit(plat_lbl, (dx + 30, plat_start - 18))
-            for i, plat in enumerate(PLATFORMS):
-                ry = plat_start + i * opt_h
-                sel = i == sel_plat_idx
-                fcs = focus == "platform" and sel
-                bg = (55, 70, 90) if fcs else (42, 55, 70)
-                pygame.draw.rect(self.screen, bg, (dx + 30, ry, dialog_w - 60, opt_h - 2))
-                if fcs:
-                    pygame.draw.rect(self.screen, (70, 160, 220), (dx + 30, ry, 3, opt_h - 2))
-                elif sel:
-                    pygame.draw.rect(self.screen, (50, 100, 140), (dx + 30, ry, 3, opt_h - 2))
-                ptxt = font_small.render(plat[1], True, (200, 210, 220))
-                self.screen.blit(ptxt, (dx + 40, ry + 2))
-
-            qual_lbl = font_small.render("Calidad grafica:", True, (150, 170, 200))
-            self.screen.blit(qual_lbl, (dx + 30, qual_start - 18))
-            for i, qual in enumerate(QUALITIES):
-                ry = qual_start + i * opt_h
-                sel = i == sel_qual_idx
-                fcs = focus == "quality" and sel
-                bg = (55, 70, 90) if fcs else (42, 55, 70)
-                pygame.draw.rect(self.screen, bg, (dx + 30, ry, dialog_w - 60, opt_h - 2))
-                if fcs:
-                    pygame.draw.rect(self.screen, (70, 160, 220), (dx + 30, ry, 3, opt_h - 2))
-                elif sel:
-                    pygame.draw.rect(self.screen, (50, 100, 140), (dx + 30, ry, 3, opt_h - 2))
-                qtxt = font_small.render(qual[1], True, (200, 210, 220))
-                self.screen.blit(qtxt, (dx + 40, ry + 2))
-
-            title_lbl = font_small.render("Titulo de ventana (opcional):", True, (150, 170, 200))
-            self.screen.blit(title_lbl, (dx + 30, title_label))
-            t_input = pygame.Rect(dx + 40, title_input_y, dialog_w - 80, 26)
-            t_color = (70, 130, 200) if focus == "title" else (60, 65, 75)
-            pygame.draw.rect(self.screen, (50, 55, 65), t_input)
-            pygame.draw.rect(self.screen, t_color, t_input, 2)
-            t_disp = title + ("|" if focus == "title" and pygame.time.get_ticks() % 600 < 300 else " ")
-            t_txt = font_small.render(t_disp, True, (220, 220, 220))
-            self.screen.blit(t_txt, (t_input.x + 6, t_input.y + 4))
-
-            pygame.draw.rect(self.screen, (50, 100, 50), create_btn)
-            pygame.draw.rect(self.screen, (70, 140, 70), create_btn, 2)
-            ct = font.render("Crear", True, (220, 220, 220))
-            self.screen.blit(ct, (create_btn.centerx - ct.get_width() // 2,
-                                  create_btn.centery - ct.get_height() // 2))
-
-            pygame.draw.rect(self.screen, (60, 60, 65), cancel_btn)
-            pygame.draw.rect(self.screen, (75, 75, 80), cancel_btn, 2)
-            et = font.render("Cancelar", True, (180, 180, 185))
-            self.screen.blit(et, (cancel_btn.centerx - et.get_width() // 2,
-                                  cancel_btn.centery - et.get_height() // 2))
-
-            pygame.display.flip()
-            self.clock.tick(30)
+        search_dir = _default_projects_dirs()
+        dialog = ProjectDialog(search_dir)
+        result_path = dialog.run()
 
         if result_path:
             set_current_project(result_path)
@@ -1026,7 +736,8 @@ exe = EXE(
                     self.save_workspace()
                     self.running = False
                 elif event.type == pygame.VIDEORESIZE:
-                    w, h = event.w, event.h
+                    w = max(MIN_W, event.w)
+                    h = max(MIN_H, event.h)
                     self.screen = pygame.display.set_mode((w, h), pygame.RESIZABLE)
                     self._resize(w, h)
 

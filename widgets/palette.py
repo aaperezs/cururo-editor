@@ -5,7 +5,9 @@ from editor.sprite_registry import get_sprite_registry, SPRITE_TO_CHAR
 from editor.elements import get_all_elements, get_element, get_element_name
 from editor.behaviors import BEHAVIORS
 from editor.sprite_registry import is_multi_tile
-from utils.sprite_manager import obtener as obtener_sprite
+from editor.tileset import Tileset, clear_cache as clear_tileset_cache
+from editor.project import get_current_project
+from editor.common.sprite_loader import obtener as obtener_sprite
 
 
 TOOL_SELECT = "select"
@@ -33,7 +35,35 @@ class EntityPalette(Widget):
         self._scroll = 0
         self._item_size = 40
         self._filter_group = None
+        self._mode = "elements"
+        self._tileset = None
         self._build_items()
+
+    @property
+    def mode(self):
+        return self._mode
+
+    @property
+    def tileset(self):
+        if self._tileset is None:
+            project = get_current_project()
+            if project:
+                self._tileset = Tileset.load_from_project(project)
+        return self._tileset
+
+    def set_mode(self, mode):
+        if mode not in ("elements", "tileset"):
+            raise ValueError(f"Invalid mode: {mode}. Must be 'elements' or 'tileset'")
+        if mode != self._mode:
+            self._mode = mode
+            self._scroll = 0
+            self._build_items()
+
+    def refresh_tileset(self):
+        clear_tileset_cache()
+        self._tileset = None
+        if self._mode == "tileset":
+            self._build_items()
 
     def _filter_label(self):
         for key, label in FILTER_GROUPS:
@@ -51,6 +81,14 @@ class EntityPalette(Widget):
 
     def _build_items(self):
         self._items = []
+        if self._mode == "tileset":
+            ts = self.tileset
+            if ts and ts.tiles:
+                for index, tile in enumerate(ts.tiles):
+                    if tile:
+                        self._items.append((index, tile, f"Tile {index}", f"tileset:{index}"))
+            return
+
         for eid in get_all_elements():
             if self._filter_group is not None:
                 g = self._get_element_group(eid)
@@ -158,7 +196,9 @@ class EntityPalette(Widget):
             pygame.draw.rect(surface, (60, 65, 70), (sx, sy, self._item_size, self._item_size), 1)
 
             if sprite:
-                if is_multi_tile(sprite_id):
+                if self._mode == "tileset" or not is_multi_tile(sprite_id):
+                    surface.blit(sprite, (sx + (self._item_size - sprite.get_width()) // 2, sy + (self._item_size - sprite.get_height()) // 2))
+                else:
                     sp_w, sp_h = sprite.get_size()
                     scale = min(self._item_size / sp_w, self._item_size / sp_h, 1.0)
                     if scale < 1:
@@ -168,8 +208,6 @@ class EntityPalette(Widget):
                     px = sx + (self._item_size - preview.get_width()) // 2
                     py = sy + (self._item_size - preview.get_height()) // 2
                     surface.blit(preview, (px, py))
-                else:
-                    surface.blit(sprite, (sx + (self._item_size - 20) // 2, sy + 2))
             else:
                 pygame.draw.rect(surface, (100, 100, 100), (sx + 8, sy + 8, 4, 4))
 

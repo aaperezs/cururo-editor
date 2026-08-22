@@ -23,18 +23,42 @@ class Project:
             self._window = {}
         self.window_title = self._window.get("title", self.name)
         self.window_fullscreen = bool(self._window.get("fullscreen", False))
-        self.resolution = self._parse_resolution(self._manifest.get("resolution", "800x600"))
 
     def _parse_resolution(self, value):
         try:
+            if isinstance(value, (list, tuple)) and len(value) == 2:
+                return (int(value[0]), int(value[1]))
             if isinstance(value, dict):
                 w = int(value.get("w", 800))
                 h = int(value.get("h", 600))
                 return (w, h)
             w, h = str(value).strip().lower().replace(" ", "").split("x")
             return (int(w), int(h))
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, TypeError):
             return (800, 600)
+
+    # ── Configuración gráfica (bloque `graphics` del manifest, con fallback) ──
+
+    @property
+    def tile_size(self):
+        return self._manifest.get("graphics", {}).get("tile_size", 20)
+
+    @property
+    def resolution(self):
+        g = self._manifest.get("graphics", {}).get("resolution")
+        if g:
+            if isinstance(g, (list, tuple)) and len(g) == 2:
+                return (int(g[0]), int(g[1]))
+            return self._parse_resolution(g)
+        return self._parse_resolution(self._manifest.get("resolution", "800x600"))
+
+    @property
+    def pixel_art_scale(self):
+        return self._manifest.get("graphics", {}).get("pixel_art_scale", 1)
+
+    @property
+    def tileset(self):
+        return self._manifest.get("graphics", {}).get("tileset", None)
 
     def _load_manifest(self):
         if os.path.exists(self._manifest_path):
@@ -50,6 +74,9 @@ class Project:
 
     def levels_path(self, *parts):
         return os.path.join(self.root, "levels", *parts)
+
+    def maps_path(self, *parts):
+        return os.path.join(self.root, "levels", "mapas", *parts)
 
     def stacks_path(self, *parts):
         return os.path.join(self.root, "levels", "mapas_stacks", *parts)
@@ -68,6 +95,8 @@ class Project:
             try:
                 w, h = str(resolution).strip().lower().replace(" ", "").split("x")
                 self._manifest["resolution"] = f"{int(w)}x{int(h)}"
+                if isinstance(self._manifest.get("graphics"), dict):
+                    self._manifest["graphics"]["resolution"] = [int(w), int(h)]
             except (ValueError, AttributeError):
                 pass
         if window_title is not None:
@@ -159,7 +188,8 @@ def get_templates_for_category(category_id):
 
 
 def create_project(template_id, project_name, target_dir, platform="desktop",
-                   quality="medium", window_title=None, resolution="800x600"):
+                   quality="medium", window_title=None, resolution="800x600",
+                   graphics_config=None):
     template_path = os.path.join(TEMPLATES_DIR, template_id)
     if not os.path.isdir(template_path):
         return None
@@ -193,6 +223,29 @@ def create_project(template_id, project_name, target_dir, platform="desktop",
             window = {}
         window["title"] = (window_title or "").strip() or project_name
         manifest["window"] = window
+        if graphics_config:
+            g = dict(graphics_config)
+            try:
+                ts = int(g.get("tile_size"))
+            except (ValueError, TypeError):
+                ts = 20
+            if ts not in (16, 20, 24, 32):
+                ts = 20
+            g["tile_size"] = ts
+            res = g.get("resolution")
+            if isinstance(res, (list, tuple)) and len(res) == 2:
+                g["resolution"] = [int(res[0]), int(res[1])]
+            elif isinstance(res, str):
+                try:
+                    rw, rh = (int(p) for p in res.strip().lower().replace(" ", "").split("x"))
+                    g["resolution"] = [rw, rh]
+                except (ValueError, AttributeError):
+                    g["resolution"] = [800, 600]
+            else:
+                g["resolution"] = [800, 600]
+            g.setdefault("pixel_art_scale", 1)
+            g.setdefault("tileset", None)
+            manifest["graphics"] = g
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
 

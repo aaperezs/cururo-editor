@@ -14,6 +14,7 @@
   "tab.events": "Events",
   "sprite.title": "Sprite Editor",
   "sprite.new": "New sprite",
+  "sprite.new_name": "new",
   "sprite.open": "Open sprite",
   "sprite.save": "Save sprite",
   "sprite.save_as": "Save as",
