@@ -45,6 +45,10 @@ class MapEditorPanel(BasePanel):
         self.viewport = MapViewport()
         self.tools = MapTools(get_element_fn=get_element)
         self._grid_renderer = GridRenderer()
+        self._paint_dragging = False
+        self._drag_source = None
+        self._drag_button = 0
+        self._last_paint_pos = None
         self._build_ui()
 
         p = get_current_project()
