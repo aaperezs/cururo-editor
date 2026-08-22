@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from editor.menu_data import (
+from editor.menu.data import (
     create_menu,
     delete_menu,
     get_menu,

@@ -5,13 +5,13 @@ import pygame_gui
 
 from editor.panels.base_panel import BasePanel
 from editor.pygame_gui_theme import create_gui
-from editor.menu_preview import MenuPreview
-from editor.menu_data import (
+from editor.menu.preview import MenuPreview
+from editor.menu.data import (
     _load_menus,
     get_all_menus,
     get_menu,
 )
-from editor.menu_crud import (
+from editor.menu.crud import (
     create_new_menu,
     clone_menu,
     delete_menu_by_id,
@@ -30,14 +30,14 @@ from editor.controls_data import (
     _load_controles,
     get_controles,
 )
-from editor.menu_dialogs import prompt_template, prompt_new_id
-from editor.menu_file_io import (
+from editor.menu.dialogs import prompt_template, prompt_new_id
+from editor.menu.file_io import (
     commit_current,
     commit_controles,
     persist,
     persist_controles,
 )
-from editor.menu_editor import (
+from editor.menu.editor import (
     TIPO_OPTIONS,
     CONFIG_LABELS,
     build_config_editor,

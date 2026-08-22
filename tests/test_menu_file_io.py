@@ -1,4 +1,4 @@
-"""Tests unitarios para editor.menu_file_io — commit, persist, save."""
+"""Tests unitarios para editor.menu.file_io — commit, persist, save."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from editor.menu_file_io import (
+from editor.menu.file_io import (
     commit_current,
     commit_config,
     commit_controles,
@@ -181,24 +181,24 @@ class TestCommitCurrent:
 # ── persist ────────────────────────────────────────────────
 
 class TestPersist:
-    @patch("editor.menu_file_io.validar_menu", return_value=([], []))
-    @patch("editor.menu_file_io.set_menu")
+    @patch("editor.menu.file_io.validar_menu", return_value=([], []))
+    @patch("editor.menu.file_io.set_menu")
     def test_persist_menu_ok(self, mock_set, mock_val):
         menu = _make_menu()
         result = persist(menu, "test_menu", None, _mock_status)
         assert result is True
         mock_set.assert_called_once_with("test_menu", menu)
 
-    @patch("editor.menu_file_io.validar_menu", return_value=(["error msg"], []))
+    @patch("editor.menu.file_io.validar_menu", return_value=(["error msg"], []))
     def test_persist_menu_validation_error(self, mock_val):
         menu = _make_menu()
         result = persist(menu, "test_menu", None, _mock_status)
         assert result is False
 
-    @patch("editor.menu_file_io.validar_menu", return_value=([], []))
-    @patch("editor.menu_file_io.set_menu")
-    @patch("editor.menu_file_io.validar_controles", return_value=([], []))
-    @patch("editor.menu_file_io.set_controles")
+    @patch("editor.menu.file_io.validar_menu", return_value=([], []))
+    @patch("editor.menu.file_io.set_menu")
+    @patch("editor.menu.file_io.validar_controles", return_value=([], []))
+    @patch("editor.menu.file_io.set_controles")
     def test_persist_menu_and_controles(self, mock_sc, mock_vc, mock_sm, mock_vm):
         menu = _make_menu()
         controls = _make_controls()
@@ -207,8 +207,8 @@ class TestPersist:
         mock_sm.assert_called_once()
         mock_sc.assert_called_once()
 
-    @patch("editor.menu_file_io.validar_menu", return_value=([], []))
-    @patch("editor.menu_file_io.set_menu")
+    @patch("editor.menu.file_io.validar_menu", return_value=([], []))
+    @patch("editor.menu.file_io.set_menu")
     def test_persist_no_menu(self, mock_set, mock_val):
         result = persist(None, None, None, _mock_status)
         assert result is True
@@ -221,14 +221,14 @@ class TestPersistControles:
         result = persist_controles(None, _mock_status)
         assert result is True
 
-    @patch("editor.menu_file_io.validar_controles", return_value=(["error"], []))
+    @patch("editor.menu.file_io.validar_controles", return_value=(["error"], []))
     def test_validation_error(self, mock_val):
         controls = _make_controls()
         result = persist_controles(controls, _mock_status)
         assert result is False
 
-    @patch("editor.menu_file_io.validar_controles", return_value=([], []))
-    @patch("editor.menu_file_io.set_controles")
+    @patch("editor.menu.file_io.validar_controles", return_value=([], []))
+    @patch("editor.menu.file_io.set_controles")
     def test_persist_ok(self, mock_set, mock_val):
         controls = _make_controls()
         result = persist_controles(controls, _mock_status)

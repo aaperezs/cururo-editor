@@ -1,6 +1,6 @@
 import pygame
 from editor.widgets.base import Widget
-from editor.widgets.menu_item import MenuItem
+from editor.menu.item import MenuItem
 
 
 class MenuDropdown(Widget):

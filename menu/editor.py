@@ -12,7 +12,7 @@ from typing import Any, Sequence
 import pygame
 import pygame_gui
 
-from editor.menu_forms import (
+from editor.menu.forms import (
     build_item_form,
     build_flag_form,
     build_stat_form,

@@ -1,6 +1,6 @@
 import pygame
 from editor.widgets.base import Widget
-from editor.widgets.menu_dropdown import MenuDropdown
+from editor.menu.dropdown import MenuDropdown
 
 
 SECTION_PAD_X = 14

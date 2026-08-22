@@ -1,4 +1,4 @@
-"""Tests unitarios para editor.menu_crud — CRUD menus, apartados, config, controles."""
+"""Tests unitarios para editor.menu.crud — CRUD menus, apartados, config, controles."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from editor.menu_crud import (
+from editor.menu.crud import (
     create_new_menu,
     clone_menu,
     delete_menu_by_id,
@@ -45,58 +45,58 @@ def _make_controls(n: int = 2) -> list[dict[str, Any]]:
 # ── Menu CRUD ──────────────────────────────────────────────
 
 class TestMenuCRUD:
-    @patch("editor.menu_crud.menu_exists", return_value=False)
-    @patch("editor.menu_crud.create_menu")
+    @patch("editor.menu.crud.menu_exists", return_value=False)
+    @patch("editor.menu.crud.create_menu")
     def test_create_new_menu(self, mock_create, mock_exists):
         mid = create_new_menu()
         assert mid == "menu_nuevo"
         mock_create.assert_called_once_with("menu_nuevo", plantilla="vacio")
 
-    @patch("editor.menu_crud.menu_exists", side_effect=[True, False])
-    @patch("editor.menu_crud.create_menu")
+    @patch("editor.menu.crud.menu_exists", side_effect=[True, False])
+    @patch("editor.menu.crud.create_menu")
     def test_create_new_menu_with_conflict(self, mock_create, mock_exists):
         mid = create_new_menu()
         assert mid == "menu_nuevo_1"
         mock_create.assert_called_once_with("menu_nuevo_1", plantilla="vacio")
 
-    @patch("editor.menu_crud.menu_exists", return_value=False)
-    @patch("editor.menu_crud.create_menu")
+    @patch("editor.menu.crud.menu_exists", return_value=False)
+    @patch("editor.menu.crud.create_menu")
     def test_create_new_menu_with_template(self, mock_create, mock_exists):
         mid = create_new_menu(template="default")
         assert mid == "menu_nuevo"
         mock_create.assert_called_once_with("menu_nuevo", plantilla="default")
 
-    @patch("editor.menu_crud.menu_exists", return_value=False)
-    @patch("editor.menu_crud.set_menu")
-    @patch("editor.menu_crud.get_menu", return_value={"id": "src", "titulo": "Src"})
+    @patch("editor.menu.crud.menu_exists", return_value=False)
+    @patch("editor.menu.crud.set_menu")
+    @patch("editor.menu.crud.get_menu", return_value={"id": "src", "titulo": "Src"})
     def test_clone_menu(self, mock_get, mock_set, mock_exists):
         mid = clone_menu("src")
         assert mid == "src_copia"
         mock_set.assert_called_once_with("src_copia", {"id": "src", "titulo": "Src"})
 
-    @patch("editor.menu_crud.menu_exists", side_effect=[True, False])
-    @patch("editor.menu_crud.set_menu")
-    @patch("editor.menu_crud.get_menu", return_value={"id": "src"})
+    @patch("editor.menu.crud.menu_exists", side_effect=[True, False])
+    @patch("editor.menu.crud.set_menu")
+    @patch("editor.menu.crud.get_menu", return_value={"id": "src"})
     def test_clone_menu_with_conflict(self, mock_get, mock_set, mock_exists):
         mid = clone_menu("src")
         assert mid == "src_copia_1"
 
-    @patch("editor.menu_crud.get_menu", return_value=None)
+    @patch("editor.menu.crud.get_menu", return_value=None)
     def test_clone_menu_nonexistent(self, mock_get):
         assert clone_menu("nope") is None
 
-    @patch("editor.menu_crud.delete_menu")
+    @patch("editor.menu.crud.delete_menu")
     def test_delete_menu_by_id(self, mock_delete):
         delete_menu_by_id("m1")
         mock_delete.assert_called_once_with("m1")
 
-    @patch("editor.menu_crud.rename_menu", return_value=True)
-    @patch("editor.menu_crud.menu_exists", return_value=False)
+    @patch("editor.menu.crud.rename_menu", return_value=True)
+    @patch("editor.menu.crud.menu_exists", return_value=False)
     def test_rename_menu_by_id(self, mock_exists, mock_rename):
         assert rename_menu_by_id("old", "new") is True
         mock_rename.assert_called_once_with("old", "new")
 
-    @patch("editor.menu_crud.menu_exists", return_value=True)
+    @patch("editor.menu.crud.menu_exists", return_value=True)
     def test_rename_menu_by_id_conflict(self, mock_exists):
         assert rename_menu_by_id("old", "existing") is False
 

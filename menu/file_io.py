@@ -9,9 +9,9 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from editor.actions_data import NONE_ACTION, schema
-from editor.menu_data import set_menu, validar_menu
+from editor.menu.data import set_menu, validar_menu
 from editor.controls_data import set_controles, validar_controles
-from editor.menu_forms import CONFIG_FIELDS
+from editor.menu.forms import CONFIG_FIELDS
 
 
 # ── Type aliases ───────────────────────────────────────────

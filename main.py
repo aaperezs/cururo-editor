@@ -89,9 +89,9 @@ elif _FROZEN:
 
 import pygame
 from editor.translation import I18n
-from editor.widgets.menu_manager import MenuManager
-from editor.widgets.menu_bar import MenuBar
-from editor.widgets.menu_item import MenuSection, MenuItem
+from editor.menu.manager import MenuManager
+from editor.menu.bar import MenuBar
+from editor.menu.item import MenuSection, MenuItem
 from editor.sprite_editor import SpriteEditorPanel
 from editor.map_editor import MapEditorPanel
 from editor.event_editor import EventEditorPanel
@@ -122,8 +122,8 @@ from editor.minigame_data import _load_minigames
 from editor.minigame_panel import MiniGamePanel
 from editor.audio_data import _load_audio
 from editor.audio_panel import AudioPanel
-from editor.menu_data import _load_menus
-from editor.menu_panel import MenuTab
+from editor.menu.data import _load_menus
+from editor.menu.panel import MenuTab
 from editor.monedas_panel import MonedasTab
 
 
