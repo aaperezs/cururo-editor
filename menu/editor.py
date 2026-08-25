@@ -27,12 +27,15 @@ PADDING = 6
 TIPO_OPTIONS = [
     ("lista_habilidades", "Habilidades"),
     ("lista_consumibles", "Consumibles"),
+    ("objetos_clave", "Objetos Clave"),
     ("equipo", "Equipo"),
     ("lista", "Lista"),
     ("opciones", "Opciones"),
     ("controles", "Controles"),
     ("stats_flags", "Stats/Flags"),
     ("stats", "Stats"),
+    ("shop_comprar", "Tienda: Comprar"),
+    ("shop_vender", "Tienda: Vender"),
 ]
 
 CONFIG_LABELS = {
@@ -40,6 +43,8 @@ CONFIG_LABELS = {
     "opciones": "items",
     "stats_flags": "flags",
     "stats": "stats",
+    "shop_comprar": "shop_id",
+    "shop_vender": "shop_id",
 }
 
 
@@ -114,6 +119,12 @@ def build_config_editor(
             )
         elif key == "flags":
             y, it_inps = build_flag_form(y, ew_avail, gui, container, it)
+        elif key == "shop_id":
+            from editor.shops_data import get_all_shops
+            shops = get_all_shops()
+            y, it_inps, _, _ = build_shop_id_form(
+                y, ew_avail, gui, container, it, shops
+            )
         else:
             y, it_inps = build_stat_form(y, ew_avail, gui, container, it)
 

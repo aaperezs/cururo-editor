@@ -22,6 +22,7 @@ CONFIG_FIELDS = {
     "items": ("id", "nombre", "descripcion"),
     "flags": ("id", "nombre", "default"),
     "stats": ("id", "nombre", "valor"),
+    "shop_id": ("shop_id",),
 }
 
 
@@ -212,3 +213,34 @@ def build_controls_form(
             )
             y += 26
     return y, ctrl_list, ctrl_add_btn, (ctrl_del_btn, ctrl_dup_btn), ctrl_inps
+
+
+def build_shop_id_form(
+    y: int,
+    ew_avail: int,
+    gui: Any,
+    container: Any,
+    it: dict[str, Any],
+    shops: list[str],
+) -> tuple[int, dict[str, Any], None, None]:
+    """Build shop_id config form. Returns (y, inputs, None, None)."""
+    pygame_gui.elements.UILabel(
+        pygame.Rect(PADDING, y, ew_avail, 18), "Shop ID", gui, container=container
+    )
+    y += 20
+
+    inputs: dict[str, Any] = {}
+    fname = "shop_id"
+    flabel = "Shop ID"
+    pygame_gui.elements.UILabel(
+        pygame.Rect(PADDING, y, 90, 22), flabel, gui, container=container
+    )
+    inputs[fname] = pygame_gui.elements.UIDropDownMenu(
+        options=[""] + shops,
+        starting_option=it.get(fname, ""),
+        relative_rect=pygame.Rect(94, y, ew_avail - 94, 22),
+        manager=gui, container=container
+    )
+    y += 26
+
+    return y, inputs, None, None

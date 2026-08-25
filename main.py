@@ -125,6 +125,9 @@ from editor.audio_panel import AudioPanel
 from editor.menu.data import _load_menus
 from editor.menu.panel import MenuTab
 from editor.monedas_panel import MonedasTab
+from editor.contadores_panel import ContadoresTab
+from editor.shops_panel import ShopsTab
+from editor.save_system_panel import SaveSystemTab
 
 
 PANEL_CLASSES = {
@@ -147,6 +150,9 @@ PANEL_CLASSES = {
     "audio": AudioPanel,
     "menus": MenuTab,
     "monedas": MonedasTab,
+    "contadores": ContadoresTab,
+    "shops": ShopsTab,
+    "save_system": SaveSystemTab,
 }
 
 MENUBAR_H = 26
