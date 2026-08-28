@@ -72,6 +72,12 @@ class Container(Widget):
         for child in reversed(self.children):
             if child.visible and child.handle_event(event):
                 return True
+        # Clic directo sobre el contenedor (p. ej. selección de filas en listas)
+        on_click = getattr(self, "on_click", None)
+        if on_click and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self._abs_rect().collidepoint(event.pos):
+                on_click()
+                return True
         return False
 
     def draw(self, surface):

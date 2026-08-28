@@ -9,6 +9,7 @@ CATEGORIES = {
             "abilities", "items", "bosses", "animations",
             "scripts", "screens", "dialogos", "characters", "assets",
             "scenes", "minigames", "audio", "menus", "monedas",
+            "shops", "contadores", "save_system",
         ],
     },
     "visual_novel": {

@@ -28,14 +28,10 @@ def _load_dialogos():
         for personaje, contextos in raw.items():
             _DIALOGOS_DATA[personaje] = {}
             for ctx, value in contextos.items():
-                if isinstance(value, dict) and "nodes" in value:
-                    _DIALOGOS_DATA[personaje][ctx] = value.get("flat", [])
-                    _TREE_DATA.setdefault(personaje, {})[ctx] = {
-                        "nodes": copy.deepcopy(value["nodes"]),
-                        "start": value.get("start", ""),
-                    }
+                if isinstance(value, (dict, list)):
+                    _DIALOGOS_DATA[personaje][ctx] = copy.deepcopy(value)
                 else:
-                    _DIALOGOS_DATA[personaje][ctx] = list(value) if isinstance(value, list) else []
+                    _DIALOGOS_DATA[personaje][ctx] = []
 
 
 def _save_dialogos():
@@ -44,26 +40,12 @@ def _save_dialogos():
         return
     os.makedirs(os.path.dirname(path), exist_ok=True)
     merged = {}
-    all_keys = set(list(_DIALOGOS_DATA.keys()) + list(_TREE_DATA.keys()))
-    for personaje in all_keys:
+    for personaje, contextos in _DIALOGOS_DATA.items():
         merged[personaje] = {}
-        flat_ctxs = _DIALOGOS_DATA.get(personaje, {})
-        tree_ctxs = _TREE_DATA.get(personaje, {})
-        all_ctxs = set(list(flat_ctxs.keys()) + list(tree_ctxs.keys()))
-        for ctx in all_ctxs:
-            if ctx in tree_ctxs:
-                tree_info = tree_ctxs[ctx]
-                entry = {
-                    "flat": flat_ctxs.get(ctx, []),
-                    "nodes": tree_info["nodes"],
-                    "start": tree_info.get("start", ""),
-                }
-                merged[personaje][ctx] = entry
-            else:
-                merged[personaje][ctx] = flat_ctxs.get(ctx, [])
+        for ctx, value in contextos.items():
+            merged[personaje][ctx] = copy.deepcopy(value)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2, ensure_ascii=False)
-
 
 def _parse_key(key):
     if "/" in key:
@@ -102,7 +84,11 @@ def get_contextos(personaje):
 
 def get_dialogo(personaje, contexto):
     d = _DIALOGOS_DATA.get(personaje, {}).get(contexto)
-    return copy.deepcopy(d) if d else None
+    if d is None:
+        return None
+    if isinstance(d, dict):
+        d = d.get("dialog", [])
+    return copy.deepcopy(d) if d else []
 
 
 def get_dialogo_by_key(key):
@@ -110,10 +96,54 @@ def get_dialogo_by_key(key):
     return get_dialogo(personaje, contexto)
 
 
+def get_dialogo_options(personaje, contexto):
+    d = _DIALOGOS_DATA.get(personaje, {}).get(contexto)
+    if isinstance(d, dict):
+        return copy.deepcopy(d.get("options", []))
+    return []
+
+
+def get_dialogo_options_by_key(key):
+    personaje, contexto = _parse_key(key)
+    return get_dialogo_options(personaje, contexto)
+
+
+MAX_OPTION_CHOICES = 5
+
+
+def set_dialogo_options(personaje, contexto, options):
+    options = list(options)
+    if any(len(o.get("choices", [])) > MAX_OPTION_CHOICES
+           for o in options if isinstance(o, dict)):
+        return False
+    if personaje not in _DIALOGOS_DATA:
+        _DIALOGOS_DATA[personaje] = {}
+    actual = _DIALOGOS_DATA[personaje].get(contexto)
+    if isinstance(actual, dict):
+        actual["options"] = options
+    else:
+        flat = actual if isinstance(actual, list) else []
+        _DIALOGOS_DATA[personaje][contexto] = {
+            "dialog": list(flat),
+            "options": options,
+        }
+    _save_dialogos()
+    return True
+
+
+def set_dialogo_options_by_key(key, options):
+    personaje, contexto = _parse_key(key)
+    return set_dialogo_options(personaje, contexto, options)
+
+
 def set_dialogo(personaje, contexto, lineas):
     if personaje not in _DIALOGOS_DATA:
         _DIALOGOS_DATA[personaje] = {}
-    _DIALOGOS_DATA[personaje][contexto] = list(lineas)
+    actual = _DIALOGOS_DATA[personaje].get(contexto)
+    if isinstance(actual, dict):
+        actual["dialog"] = list(lineas)
+    else:
+        _DIALOGOS_DATA[personaje][contexto] = list(lineas)
     _save_dialogos()
 
 
@@ -162,7 +192,7 @@ def create_dialogo(personaje, contexto):
         return False
     if personaje not in _DIALOGOS_DATA:
         _DIALOGOS_DATA[personaje] = {}
-    _DIALOGOS_DATA[personaje][contexto] = ["Nueva linea"]
+    _DIALOGOS_DATA[personaje][contexto] = {"dialog": ["Nueva linea"]}
     _save_dialogos()
     return True
 
@@ -205,7 +235,7 @@ def rename_dialogo(old_key, new_key):
 
 NODE_DEFAULTS = {
     "dialogo": {"texto": "", "next": ""},
-    "opcion": {"choices": [{"texto": "", "next": ""}]},
+    "opcion": {"texto": "", "choices": [{"texto": "", "next": ""}]},
     "condicion": {"flag": "", "operador": "==", "valor": "", "next": "", "next_false": ""},
     "accion": {"tipo_accion": "set_flag", "params": {}, "next": ""},
     "salto": {"destino": "", "next": ""},
@@ -265,9 +295,9 @@ def set_tree_by_key(key, tree_data):
 
 def _new_node_id(existing_nodes):
     n = 1
-    while f"n{n}" in existing_nodes:
+    while f"node{n}" in existing_nodes:
         n += 1
-    return f"n{n}"
+    return f"node{n}"
 
 
 def add_node(personaje, contexto, tipo, after_id=None):

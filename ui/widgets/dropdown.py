@@ -118,7 +118,7 @@ class Dropdown(Widget):
         
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mx, my = event.pos
-            r = self.rect
+            r = self.get_abs_rect()
             if r.collidepoint(mx, my):
                 if not self._open:
                     self._open = True
@@ -129,7 +129,7 @@ class Dropdown(Widget):
             if self._open:
                 ih = 24
                 vis = min(len(self._filtered), self.MAX_VISIBLE)
-                total_h = vis * ih + 2
+                total_h = vis * ih + 6  # match draw padding
                 scr_h = pygame.display.get_surface().get_height() if pygame.display.get_surface() else 600
                 space_below = scr_h - (r.y + r.h)
                 open_up = total_h > space_below and r.y > total_h
@@ -141,8 +141,9 @@ class Dropdown(Widget):
                     dd_rect.y = scr_h - dd_rect.h
                 has_scroll = len(self._filtered) > self.MAX_VISIBLE
                 sb_w = 10 if has_scroll else 0
+                item_w = r.w - sb_w
                 if has_scroll:
-                    sb_rect = pygame.Rect(r.x + r.w - sb_w, dy, sb_w, total_h)
+                    sb_rect = pygame.Rect(r.x + r.w - sb_w, dy + 2, sb_w, total_h - 4)
                     if sb_rect.collidepoint(mx, my):
                         total = len(self._filtered)
                         max_scroll = total - vis
@@ -158,9 +159,10 @@ class Dropdown(Widget):
                             else:
                                 self._scroll_offset = min(max_scroll, self._scroll_offset + vis)
                                 return True
-                item_rect = pygame.Rect(r.x, dy, r.w - sb_w, vis * ih)
+                # Item rect matches draw: x+1, dy+2, item_w-2, ih-2 per item
+                item_rect = pygame.Rect(r.x + 1, dy + 2, item_w - 2, vis * ih)
                 if item_rect.collidepoint(mx, my):
-                    click_idx = (my - dy) // ih
+                    click_idx = (my - (dy + 2)) // ih
                     idx = self._scroll_offset + click_idx
                     if 0 <= idx < len(self._filtered):
                         self._selected = self._filtered[idx][0]
@@ -226,6 +228,17 @@ class Dropdown(Widget):
             sb_w = 10 if has_scroll else 0
             item_w = r.w - sb_w
             
+            # Dropdown list background with more padding for border_radius
+            list_h = vis * ih + 6  # +6 padding (was +2) to avoid border_radius clipping
+            dd_rect = pygame.Rect(r.x, dy, r.w, list_h)
+            if dd_rect.y < 0:
+                dd_rect.y = 0
+            if scr_h and dd_rect.y + dd_rect.h > scr_h:
+                dd_rect.y = scr_h - dd_rect.h
+            has_scroll = len(self._filtered) > self.MAX_VISIBLE
+            sb_w = 10 if has_scroll else 0
+            item_w = r.w - sb_w
+            
             pygame.draw.rect(surface, _c(theme.surface_elevated), dd_rect, border_radius=theme.radius)
             pygame.draw.rect(surface, _c(theme.border), dd_rect, 1, border_radius=theme.radius)
             
@@ -237,18 +250,19 @@ class Dropdown(Widget):
                 if idx >= len(self._filtered):
                     break
                 v, l = self._filtered[idx]
-                ir = pygame.Rect(r.x, dy + i * ih, item_w, ih)
+                # Items with 1px padding from edges
+                ir = pygame.Rect(r.x + 1, dy + 2 + i * ih, item_w - 2, ih - 2)
                 sel = v == self._selected
                 bg = _c(theme.accent if sel else (theme.bg_hover if ir.collidepoint(pygame.mouse.get_pos()) else theme.surface_elevated))
-                pygame.draw.rect(surface, bg, ir)
+                pygame.draw.rect(surface, bg, ir, border_radius=2)
                 if i < vis - 1:
-                    pygame.draw.line(surface, _c(theme.border), (ir.x, ir.y + ih), (ir.x + ir.w, ir.y + ih))
+                    pygame.draw.line(surface, _c(theme.border), (ir.x, ir.y + ih - 2), (ir.x + ir.w, ir.y + ih - 2))
                 txt = font.render(l, True, _c(theme.text))
                 surface.blit(txt, (ir.x + 8, ir.y + (ih - txt.get_height()) // 2))
             
             if has_scroll:
                 sb_x = r.x + r.w - sb_w
-                track = pygame.Rect(sb_x, dy, sb_w, total_h)
+                track = pygame.Rect(sb_x, dy + 2, sb_w, list_h - 4)
                 pygame.draw.rect(surface, _c(theme.bg_disabled), track, border_radius=2)
                 total = len(self._filtered)
                 thumb_h = max(12, int(track.h * vis / total))
@@ -261,3 +275,5 @@ class Dropdown(Widget):
                 hint_font = get_font_manager().get(theme.font_sizes["caption"])
                 hint = hint_font.render(f'"{self._filter_text}" ({len(self._filtered)})', True, _c(theme.text_dim))
                 surface.blit(hint, (dd_rect.x + 4, dd_rect.y + dd_rect.h - 16))
+            
+            surface.set_clip(clip)

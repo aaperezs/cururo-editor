@@ -87,7 +87,8 @@ class ContadoresTab(BasePanel):
                     color=(180, 185, 195))
         lbl.parent = ep; ep.children.append(lbl)
         self._id_input = TextInput(120, y, 220, 22, default=contador.get("id", ""),
-                                    on_change=self._on_id_change)
+                                    max_chars=30, numeric_only=False)
+        self._id_input._on_change = self._on_id_change
         self._id_input.parent = ep; ep.children.append(self._id_input)
         y += 28
 
@@ -95,7 +96,8 @@ class ContadoresTab(BasePanel):
                     color=(180, 185, 195))
         lbl.parent = ep; ep.children.append(lbl)
         self._nombre_input = TextInput(120, y, 300, 22, default=contador.get("nombre", ""),
-                                        on_change=self._on_nombre_change)
+                                        max_chars=50, numeric_only=False)
+        self._nombre_input._on_change = self._on_nombre_change
         self._nombre_input.parent = ep; ep.children.append(self._nombre_input)
         y += 28
 
@@ -103,7 +105,8 @@ class ContadoresTab(BasePanel):
                     color=(180, 185, 195))
         lbl.parent = ep; ep.children.append(lbl)
         self._inicial_input = TextInput(120, y, 100, 22, default=str(contador.get("inicial", 0)),
-                                        on_change=self._on_inicial_change)
+                                        max_chars=7, numeric_only=True)
+        self._inicial_input._on_change = self._on_inicial_change
         self._inicial_input.parent = ep; ep.children.append(self._inicial_input)
         y += 28
 
@@ -111,15 +114,17 @@ class ContadoresTab(BasePanel):
                     color=(180, 185, 195))
         lbl.parent = ep; ep.children.append(lbl)
         self._maximo_input = TextInput(120, y, 100, 22, default=str(contador.get("maximo", 999999)),
-                                        on_change=self._on_maximo_change)
+                                        max_chars=7, numeric_only=True)
+        self._maximo_input._on_change = self._on_maximo_change
         self._maximo_input.parent = ep; ep.children.append(self._maximo_input)
         y += 28
 
         lbl = Label(PADDING, y, 110, 22, self.i18n.t("contador.descripcion") + ":", font_size=12,
                     color=(180, 185, 195))
         lbl.parent = ep; ep.children.append(lbl)
-        self._desc_input = TextInput(120, y, 400, 50, default=contador.get("descripcion", ""),
-                                     multiline=True, on_change=self._on_desc_change)
+        self._desc_input = TextInput(120, y, 400, 22, default=contador.get("descripcion", ""),
+                                     max_chars=200, numeric_only=False)
+        self._desc_input._on_change = self._on_desc_change
         self._desc_input.parent = ep; ep.children.append(self._desc_input)
 
     def _set_status(self, texto, error=False):

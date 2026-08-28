@@ -127,6 +127,7 @@ from editor.menu.panel import MenuTab
 from editor.monedas_panel import MonedasTab
 from editor.contadores_panel import ContadoresTab
 from editor.shops_panel import ShopsTab
+from editor.global_events_panel import GlobalEventsTab
 from editor.save_system_panel import SaveSystemTab
 
 
@@ -152,6 +153,7 @@ PANEL_CLASSES = {
     "monedas": MonedasTab,
     "contadores": ContadoresTab,
     "shops": ShopsTab,
+    "global_events": GlobalEventsTab,
     "save_system": SaveSystemTab,
 }
 
@@ -568,7 +570,7 @@ exe = EXE(
             mb.add_section(mundo.label, mundo.items)
 
         contenido_items = []
-        for pid in ("elements", "items", "abilities", "bosses", "behaviors", "events", "dialogos", "menus", "monedas"):
+        for pid in ("elements", "items", "abilities", "bosses", "behaviors", "events", "dialogos", "menus", "monedas", "shops", "contadores", "save_system"):
             if pid in available:
                 label = {
                     "elements": "Elementos",
@@ -580,6 +582,9 @@ exe = EXE(
                     "dialogos": "Dialogos",
                     "menus": "Menús",
                     "monedas": "Monedas",
+                    "shops": "Tiendas",
+                    "contadores": "Contadores",
+                    "save_system": "Sistema de Guardado",
                 }[pid]
                 contenido_items.append(
                     MenuItem(label, action=lambda pid=pid: self._open_panel(pid))
@@ -674,6 +679,10 @@ exe = EXE(
             maps_panel = self.menu._panel_instances.get("maps")
             if maps_panel and hasattr(maps_panel, "get_workspace_data"):
                 data["maps"] = maps_panel.get_workspace_data()
+        if "dialogos" in available:
+            dlg_panel = self.menu._panel_instances.get("dialogos")
+            if dlg_panel and hasattr(dlg_panel, "persistir_dialogos"):
+                dlg_panel.persistir_dialogos()
         workspace.save_workspace(data)
 
     def restore_workspace(self):

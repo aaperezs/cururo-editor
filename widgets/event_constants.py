@@ -61,6 +61,9 @@ def get_param_options(pk: str, ct: str | None = None) -> list[tuple[str, str]]:
         return get_sprite_options()
     if pk == "nivel":
         return get_map_list()
+    if pk == "shop_id":
+        from editor.shops_data import get_all_shops
+        return [("", "(ninguna)")] + [(s, s) for s in sorted(get_all_shops())]
     if pk == "operador" and ct:
         return COND_OPERATOR_OPTIONS.get(ct, [])
     if pk == "estado":
@@ -117,6 +120,7 @@ ACTION_TYPES = [
     "desbloquear_habilidad", "equipar_habilidad", "cambiar_skin",
     "mostrar_boss", "iniciar_demo", "mostrar_ventana",
     "avanzar", "accion_botton",
+    "open_shop", "close_shop", "dialogo_tree",
 ]
 
 CONDITION_PARAMS: dict[str, dict[str, Any]] = {
@@ -160,13 +164,16 @@ ACTION_PARAMS: dict[str, dict[str, Any]] = {
     "mostrar_ventana": {"ventana_id": ""},
     "avanzar": {"direccion": ""},
     "accion_botton": {"tecla": ""},
+    "open_shop": {"shop_id": ""},
+    "close_shop": {},
+    "dialogo_tree": {"dialogo_id": ""},
 }
 
 # Param keys that should show a dropdown instead of text field
 DROPDOWN_PARAMS = {
     "ability", "item", "sprite_id", "nivel", "operador", "estado",
     "bloquear", "visible", "habilidad", "demo_id", "boss_id",
-    "ventana_id", "direccion", "tecla", "moneda",
+    "ventana_id", "direccion", "tecla", "moneda", "shop_id",
 }
 
 # Operator options per condition type
