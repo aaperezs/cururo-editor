@@ -19,6 +19,7 @@ from editor.map_file_io import (
     get_workspace_data as _get_workspace_data,
     sync_events_from_widget,
 )
+from editor.map_model import ValidationError
 from editor.map_toolbar import build_toolbar, launch_game, select_project_folder
 from editor.map_dialogs import build_new_dialog, build_resize_dialog, open_map_dialog, open_save_dialog
 from editor.map_grid_renderer import GridRenderer
@@ -379,7 +380,12 @@ class MapEditorPanel(BasePanel):
             self._event_widget.selected_z, self._event_widget.get_eventos(),
         )
 
-        save_map(tab, _maps_dir(), _stacks_dir())
+        try:
+            save_map(tab, _maps_dir(), _stacks_dir())
+        except ValidationError as e:
+            print(f"[MapEditor] {e}")
+            self._map_tab_bar.set_tab_label(tab.map_id, tab.label(), dirty=True)
+            return
         self._map_tab_bar.set_tab_label(tab.map_id, tab.label(), dirty=False)
 
     def _on_layer_change_active(self, z):

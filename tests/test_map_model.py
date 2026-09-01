@@ -241,6 +241,85 @@ class TestFilePersistence:
             assert (1, 2, 0) in loaded
             assert loaded[(1, 2, 0)]["eventos"][0]["trigger"] == "contact"
 
+    def test_validar_stacks_refs_rotas(self, monkeypatch):
+        from editor.map_model import _load_catalogs, validar_stacks
+
+        def fake_catalogs():
+            return {
+                "items": {"item_nuevo", "key_willow"},
+                "habilidades": {"base", "golpe_cabeza"},
+                "tiendas": {"fenrir_shop"},
+                "monedas": {"monedas"},
+            }
+
+        monkeypatch.setattr("editor.map_model._load_catalogs", fake_catalogs)
+
+        stacks = {
+            (1, 2, 0): {
+                "pos": [1, 2], "z": 0,
+                "eventos": [{
+                    "trigger": "contact",
+                    "condiciones": [{"tipo": "item_count", "params": {"item": "item_fantasma"}}],
+                    "acciones": [{"tipo": "give_item", "params": {"item": "item_bueno"}},
+                                 {"tipo": "open_shop", "params": {"shop_id": "tienda_inexistente"}}],
+                }],
+            },
+        }
+        errores = validar_stacks(stacks)
+        assert any("item_fantasma" in e for e in errores)
+        assert any("item_bueno" not in e for e in errores)
+        assert any("tienda_inexistente" in e for e in errores)
+
+    def test_validar_stacks_ok(self, monkeypatch):
+        from editor.map_model import _load_catalogs, validar_stacks
+
+        def fake_catalogs():
+            return {
+                "items": {"item_nuevo"},
+                "habilidades": {"manto_oscuridad"},
+                "tiendas": {"fenrir_shop"},
+                "monedas": {"monedas"},
+            }
+
+        monkeypatch.setattr("editor.map_model._load_catalogs", fake_catalogs)
+
+        stacks = {
+            (1, 2, 0): {
+                "pos": [1, 2], "z": 0,
+                "eventos": [{
+                    "trigger": "contact",
+                    "condiciones": [{"tipo": "ability", "params": {"ability": "manto_oscuridad"}}],
+                    "acciones": [{"tipo": "give_item", "params": {"item": "item_nuevo"}},
+                                 {"tipo": "open_shop", "params": {"shop_id": "fenrir_shop"}}],
+                }],
+            },
+        }
+        assert validar_stacks(stacks) == []
+
+    def test_save_stacks_lanza_validation_error(self, monkeypatch):
+        from editor.map_model import ValidationError, _load_catalogs
+
+        def fake_catalogs():
+            return {"items": {"item_nuevo"}, "habilidades": set(),
+                    "tiendas": set(), "monedas": set()}
+
+        monkeypatch.setattr("editor.map_model._load_catalogs", fake_catalogs)
+
+        stacks = {
+            (1, 2, 0): {
+                "pos": [1, 2], "z": 0,
+                "eventos": [{"trigger": "contact",
+                             "condiciones": [],
+                             "acciones": [{"tipo": "give_item", "params": {"item": "no_existe"}}]}],
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            try:
+                save_stacks("m1", stacks, tmpdir)
+                assert False, "debió lanzar ValidationError"
+            except ValidationError as e:
+                assert "no_existe" in str(e)
+
     def test_save_load_multi_tiles(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             mt = {(3, 4, 0): {"element_id": "tree"}}

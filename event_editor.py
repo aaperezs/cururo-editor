@@ -147,6 +147,16 @@ class EventEditorPanel(BasePanel):
             else:
                 self._stacks[key] = {"pos": list(sel), "z": z, "eventos": self._event_widget.get_eventos()}
 
+        from editor.map_model import validar_stacks, ValidationError
+        try:
+            errores = validar_stacks(self._stacks)
+        except Exception as e:
+            self._map_label.text = f"Error de validación: {e}"
+            return
+        if errores:
+            self._map_label.text = "Errores: " + "; ".join(errores[:3]) + ("..." if len(errores) > 3 else "")
+            return
+
         stacks_list = []
         for key, data in self._stacks.items():
             entry = {"pos": [key[0], key[1]], "z": key[2]}
@@ -157,6 +167,7 @@ class EventEditorPanel(BasePanel):
         os.makedirs(_stacks_dir(), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump({"stacks": stacks_list}, f, indent=2, ensure_ascii=False)
+        self._map_label.text = "Guardado OK"
 
     def set_selection(self, pos, z, sprite_id):
         """Called by map editor when a tile is selected with a specific z-layer"""

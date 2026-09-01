@@ -116,8 +116,123 @@ def load_layer(map_id: str, z: int, maps_dir: str) -> tuple[Grid, int, int] | No
 
 # ── Persistencia de stacks ─────────────────────────────────
 
+class ValidationError(Exception):
+    """Lanzada cuando los eventos de un mapa tienen referencias rotas a catálogos."""
+
+
+def _load_catalogs():
+    """Carga catálogos (items, habilidades, tiendas, monedas). Devuelve dict de sets.
+
+    Si no hay proyecto activo o un catálogo no existe, ese set queda vacío
+    (validación no bloqueante).
+    """
+    cats = {"items": set(), "habilidades": set(), "tiendas": set(), "monedas": set()}
+    try:
+        from editor.project import get_current_project
+        p = get_current_project()
+        if not p:
+            return cats
+        import json as _json
+        for key, fname in (
+            ("items", "items.json"),
+            ("habilidades", "habilidades.json"),
+            ("tiendas", "shops.json"),
+            ("monedas", "monedas.json"),
+        ):
+            path = p.data_path(fname)
+            if not os.path.exists(path):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = _json.load(f)
+            except Exception:
+                continue
+            if key == "items":
+                ids = set(data.keys())
+                # items también viven en botin.json (drops) y recetas.json (insumos/resultados)
+                for extra, getter in (
+                    ("botin.json", lambda d: d.keys()),
+                    ("recetas.json", lambda d: list(d.keys()) +
+                     [r.get("resultado", "") for r in d.values() if isinstance(r, dict)] +
+                     [iid for r in d.values() if isinstance(r, dict)
+                      for iid in (r.get("requiere", {}) or {}).keys()]),
+                ):
+                    epath = p.data_path(extra)
+                    if os.path.exists(epath):
+                        try:
+                            with open(epath, "r", encoding="utf-8") as f:
+                                edata = _json.load(f)
+                            if isinstance(edata, dict):
+                                ids.update(getter(edata))
+                        except Exception:
+                            pass
+                cats["items"] = set(i for i in ids if i)
+            elif key == "habilidades":
+                cats["habilidades"] = set(data.get("habilidades", {}).keys())
+            elif key == "tiendas":
+                cats["tiendas"] = set(
+                    s.get("shop_id") for s in data if isinstance(s, dict) and s.get("shop_id")
+                )
+            elif key == "monedas":
+                cats["monedas"] = set(
+                    m.get("id") for m in data if isinstance(m, dict) and m.get("id")
+                )
+    except Exception:
+        pass
+    return cats
+
+
+def validar_stacks(stacks: Stacks) -> list[str]:
+    """Valida referencias de los eventos de un mapa contra los catálogos.
+
+    Devuelve lista de mensajes de error (vacía si todo OK).
+    Solo bloquea referencias a IDs que no existen en catálogos cargados.
+    """
+    cats = _load_catalogs()
+    errores: list[str] = []
+    if not any(cats.values()):
+        return errores
+
+    def _check_ref(tipo_ref, val, contexto, params):
+        if not val:
+            return
+        if tipo_ref == "item" and val not in cats["items"]:
+            errores.append(f"[{contexto}] item '{val}' no existe en el catálogo de items")
+        elif tipo_ref == "ability" and val not in cats["habilidades"]:
+            errores.append(f"[{contexto}] ability '{val}' no existe en habilidades")
+        elif tipo_ref == "shop" and val not in cats["tiendas"]:
+            errores.append(f"[{contexto}] shop '{val}' no existe en tiendas")
+        elif tipo_ref == "moneda" and val not in cats["monedas"]:
+            errores.append(f"[{contexto}] moneda '{val}' no existe en monedas")
+
+    for key, data in stacks.items():
+        ctx = f"stack {key}"
+        for ev in data.get("eventos", []) if isinstance(data, dict) else []:
+            ectx = f"{ctx}"
+            for cond in ev.get("condiciones", []):
+                params = cond.get("params", {}) if isinstance(cond, dict) else {}
+                _check_ref("item", params.get("item"), ectx, params)
+                _check_ref("ability", params.get("ability"), ectx, params)
+                _check_ref("moneda", params.get("moneda"), ectx, params)
+            for acc in ev.get("acciones", []):
+                if not isinstance(acc, dict):
+                    continue
+                params = acc.get("params", {}) if isinstance(acc.get("params"), dict) else {}
+                tipo = acc.get("tipo", "")
+                if tipo in ("give_item", "remove_item"):
+                    _check_ref("item", params.get("item"), ectx, params)
+                elif tipo == "open_shop":
+                    _check_ref("shop", params.get("shop_id") or params.get("shop"), ectx, params)
+                elif tipo in ("give_moneda", "remove_moneda"):
+                    _check_ref("moneda", params.get("moneda"), ectx, params)
+    return errores
+
+
 def save_stacks(map_id: str, stacks: Stacks, stacks_dir: str) -> str:
-    """Guarda stacks (eventos) de un mapa."""
+    """Guarda stacks (eventos) de un mapa. Valida referencias antes de escribir."""
+    errores = validar_stacks(stacks)
+    if errores:
+        raise ValidationError("; ".join(errores[:5]) + ("..." if len(errores) > 5 else ""))
     stacks_list: list[dict[str, Any]] = []
     for key, data in stacks.items():
         entry: dict[str, Any] = {"pos": [key[0], key[1]], "z": key[2]}

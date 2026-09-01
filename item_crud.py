@@ -38,45 +38,64 @@ def delete_item_by_id(item_id: str) -> None:
 def rename_item_with_refs(old_id: str, new_id: str, project) -> int:
     """Rename item and update cross-references in elementos.json and stacks.
 
-    Returns count of updated stack files.
+    Returns count of updated files.
     """
     if item_exists(new_id):
         return 0
     if not rename_item(old_id, new_id):
         return 0
 
-    updated_stacks = 0
+    updated = 0
     if project:
-        _update_elementos_refs(old_id, new_id, project)
-        updated_stacks = _update_stack_refs(old_id, new_id, project)
+        updated += _update_elementos_refs(old_id, new_id, project)
+        updated += _update_stack_refs(old_id, new_id, project)
+        updated += _update_dialogos_refs(old_id, new_id, project)
 
-    return updated_stacks
+    return updated
 
 
-def _update_elementos_refs(old_id: str, new_id: str, project) -> None:
+def _walk_replace(obj, old_id: str, new_id: str) -> bool:
+    """Recursively replace references to old_id in a JSON-like structure.
+
+    Updates any value stored under a key named "item" or "item_id" that equals
+    old_id. Covers actions, conditions, dialog choices and drop tables.
+    """
+    changed = False
+    if isinstance(obj, dict):
+        for key in list(obj.keys()):
+            if key in ("item", "item_id") and obj[key] == old_id:
+                obj[key] = new_id
+                changed = True
+            elif isinstance(obj[key], (dict, list)):
+                if _walk_replace(obj[key], old_id, new_id):
+                    changed = True
+    elif isinstance(obj, list):
+        for i, item in enumerate(obj):
+            if isinstance(item, (dict, list)):
+                if _walk_replace(item, old_id, new_id):
+                    changed = True
+    return changed
+
+
+def _update_elementos_refs(old_id: str, new_id: str, project) -> int:
     el_path = project.data_path("elementos.json")
     if not os.path.exists(el_path):
-        return
+        return 0
     try:
         with open(el_path, "r", encoding="utf-8") as f:
             el_data = json.load(f)
-        changed = False
-        for eid, eobj in el_data.items():
-            for pk, pv in eobj.get("properties", {}).items():
-                if isinstance(pv, list):
-                    for drop in pv:
-                        if isinstance(drop, dict) and drop.get("item") == old_id:
-                            drop["item"] = new_id
-                            changed = True
+        changed = _walk_replace(el_data, old_id, new_id)
         if changed:
             with open(el_path, "w", encoding="utf-8") as f:
                 json.dump(el_data, f, indent=2, ensure_ascii=False)
+            return 1
     except Exception:
         pass
+    return 0
 
 
 def _update_stack_refs(old_id: str, new_id: str, project) -> int:
-    stacks_dir = project.data_path("stacks")
+    stacks_dir = project.stacks_path()
     if not os.path.isdir(stacks_dir):
         return 0
     updated = 0
@@ -87,13 +106,7 @@ def _update_stack_refs(old_id: str, new_id: str, project) -> int:
         try:
             with open(fpath, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            changed = False
-            for ev in data.get("events", []):
-                if ev.get("event") in ("give_item", "remove_item"):
-                    params = ev.get("params", {})
-                    if params.get("item_id") == old_id:
-                        params["item_id"] = new_id
-                        changed = True
+            changed = _walk_replace(data, old_id, new_id)
             if changed:
                 with open(fpath, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
@@ -101,3 +114,21 @@ def _update_stack_refs(old_id: str, new_id: str, project) -> int:
         except Exception:
             pass
     return updated
+
+
+def _update_dialogos_refs(old_id: str, new_id: str, project) -> int:
+    """Update item refs inside data/dialogos.json (choices/params of actions)."""
+    d_path = project.data_path("dialogos.json")
+    if not os.path.exists(d_path):
+        return 0
+    try:
+        with open(d_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        changed = _walk_replace(data, old_id, new_id)
+        if changed:
+            with open(d_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            return 1
+    except Exception:
+        pass
+    return 0
