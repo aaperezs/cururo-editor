@@ -105,6 +105,7 @@ from editor.boss_tab import BossTab
 from editor.boss_data import _load as _load_bosses
 from editor import workspace
 from editor.widgets.animation_panel import AnimationPanel
+from editor.widgets.message_bar import MessageBar
 from editor.animations import _load as _load_animations
 from editor.script_panel import ScriptPanel
 from editor.custom_behaviors import CustomBehaviorsPanel
@@ -158,6 +159,7 @@ PANEL_CLASSES = {
 }
 
 MENUBAR_H = 26
+MESSAGEBAR_H = 28
 MIN_W = 720
 MIN_H = 560
 
@@ -259,6 +261,8 @@ class EditorApp:
 
         self.menu_bar = self._crear_menu_bar()
         self.menu = self._crear_menu_manager()
+        self.message_bar = MessageBar(0, self.alto - MESSAGEBAR_H, self.ancho, MESSAGEBAR_H, right_margin=90)
+        self.menu.set_notify_hook(self._notify)
         self.restore_workspace()
 
     # ── Acciones del menú ─────────────────────────────────
@@ -266,6 +270,9 @@ class EditorApp:
     def _open_panel(self, panel_id):
         self.menu.set_active_by_id(panel_id)
         self.menu.get_active_panel()
+
+    def _notify(self, message, level="info"):
+        self.message_bar.notify(message, level)
 
     def nuevo_proyecto(self):
         """Abre el diálogo de nuevo proyecto usando ProjectDialog."""
@@ -633,7 +640,7 @@ exe = EXE(
         return set(PANEL_CLASSES.keys())
 
     def _crear_menu_manager(self):
-        m = MenuManager(0, MENUBAR_H, self.ancho, self.alto - MENUBAR_H)
+        m = MenuManager(0, MENUBAR_H, self.ancho, self.alto - MENUBAR_H - MESSAGEBAR_H)
         available = self._get_available_panels()
         for tab_id, cls in PANEL_CLASSES.items():
             if tab_id in available:
@@ -653,7 +660,9 @@ exe = EXE(
         self.ancho = w
         self.alto = h
         self.menu_bar.set_size(w, MENUBAR_H)
-        self.menu.set_size(w, h - MENUBAR_H)
+        self.menu.set_size(w, h - MENUBAR_H - MESSAGEBAR_H)
+        self.message_bar.set_size(w, MESSAGEBAR_H)
+        self.message_bar.set_pos(0, h - MESSAGEBAR_H)
 
     # ── Workspace ─────────────────────────────────────────
 
@@ -770,6 +779,9 @@ exe = EXE(
 
                 self.menu.handle_event(event)
 
+                if self.message_bar.handle_event(event):
+                    continue
+
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     mx, my = event.pos
                     lx = self.ancho - 80
@@ -781,11 +793,13 @@ exe = EXE(
                         lx += 40
 
             self.menu.update(time_delta)
+            self.message_bar.update(time_delta)
 
             self.screen.fill((25, 28, 32))
             self.menu_bar.draw(self.screen)
             self.menu.draw(self.screen)
             self.menu_bar.draw_dropdown(self.screen)
+            self.message_bar.draw(self.screen)
             self._draw_lang_selector()
 
             # Process menu bar actions that open panels (deferred)

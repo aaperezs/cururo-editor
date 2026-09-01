@@ -12,6 +12,11 @@ from .scrollable import ScrollableArea
 from .text_input import TextInput
 from .textarea import TextArea
 from .dropdown import Dropdown
+from .simple_dropdown import SimpleDropdown
+from .scroll_container import ScrollContainer
+from .message_bar import MessageBar
+from .animation_panel import AnimationPanel
+from .script_editor import ScriptEditor
 from .dialog import Dialog
 from .slider import Slider
 from .property_editor import PropertyEditor

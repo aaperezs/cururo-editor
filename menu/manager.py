@@ -9,6 +9,16 @@ class MenuManager(Container):
         self._panel_registry = []
         self._panel_instances = {}
         self._active_id = None
+        self._notify_hook = None
+
+    def set_notify_hook(self, hook):
+        self._notify_hook = hook
+        for p in self._panel_instances.values():
+            p._notify = hook
+
+    def notify(self, message, level="info"):
+        if self._notify_hook:
+            self._notify_hook(message, level)
 
     # ── Registro ────────────────────────────────────────────
 
@@ -25,6 +35,7 @@ class MenuManager(Container):
             if tid == tab_id:
                 p = cls(0, 0, self.rect.w, self.rect.h, *args, **kwargs)
                 p.parent = self  # <-- clave: asigna parent para que _abs_rect() calcule bien
+                p._notify = self._notify_hook
                 self._panel_instances[tab_id] = p
                 return p
         return None

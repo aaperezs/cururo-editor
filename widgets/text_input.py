@@ -311,6 +311,9 @@ class TextInput(Widget):
         except ValueError:
             return 0
 
+    def get_text(self):
+        return self.text
+
     def set_value(self, v):
         self.text = str(v)
         self._cursor_pos = len(self.text)

@@ -30,7 +30,11 @@ class SimpleDropdown:
         self.visible = True
         self.enabled = True
         self._all_options = list(options)
-        self._selected = selected or (options[0][0] if options else None)
+        self._selected = (
+            selected
+            if selected is not None
+            else (options[0][0] if options else None)
+        )
         self._open = False
         self._on_select: object | None = None
         self._filter_text = ""

@@ -8,6 +8,12 @@ class BasePanel(Container):
         super().__init__(0, 0, w, h)
         self.i18n = i18n
         self._descripcion = ""
+        self._notify = None
+
+    def notify(self, message, level="info"):
+        """Muestra un mensaje en la barra global (info/warn/error)."""
+        if self._notify:
+            self._notify(message, level)
 
     def update(self, dt):
         pass
