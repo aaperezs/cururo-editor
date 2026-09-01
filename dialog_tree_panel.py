@@ -2,12 +2,16 @@ import pygame
 import pygame_gui
 
 from editor.translation import I18n
+from editor.widgets.simple_dropdown import SimpleDropdown
+from editor.widgets.label import Label
+from editor.widgets.text_input import TextInput
+from editor.widgets.button import Button
 from editor.panels.base_panel import BasePanel
 from editor.pygame_gui_theme import create_gui
 from editor.dialog_data import (
     get_all_dialogo_keys, get_dialogo_by_key, set_dialogo_by_key,
     delete_dialogo_by_key, create_dialogo_by_key, rename_dialogo,
-    get_dialogo_options_by_key, set_dialogo_options_by_key,
+    get_dialogo_options_by_key, set_dialogo_options_by_key, delete_dialogo_options_by_key,
     get_tree, get_tree_by_key, set_tree_by_key, create_tree_key, add_node, remove_node,
     compile_to_flat, NODE_LABELS, NODE_COLORS, NODE_DEFAULTS,
     _parse_key, _make_key,
@@ -19,6 +23,13 @@ LEFT_W = 220
 NODE_H = 30
 NODE_INDENT = 20
 MAX_CHOICES = 5
+
+# Área del árbol: 3.5 filas visibles + scrollbar; el detalle ocupa el resto.
+TREE_VISIBLE_ROWS = 3.5
+TREE_H = int(TREE_VISIBLE_ROWS * NODE_H)  # 105
+TREE_TOP_OFFSET = 28
+SCROLLBAR_W = 10
+DETAIL_TOP = TREE_TOP_OFFSET + TREE_H  # 133
 
 # Campos de parámetros dinámicos por acción (key de la choice -> etiqueta)
 OPTION_ACTION_FIELDS = {
@@ -74,6 +85,88 @@ OPTION_ACTION_FIELDS = {
 
 OPTION_ACTION_OPTIONS = sorted(OPTION_ACTION_FIELDS.keys())
 
+# Params que solo aceptan dígitos
+NUMERIC_PARAMS = {"cantidad", "fade_ms", "volumen", "segundos", "valor", "precio"}
+
+# Params con dropdown de datos reales (None = no aplica dropdown)
+DATA_PARAM_SOURCES = {
+    "dialog": "dialogos",
+    "dialogo_id": "dialogos",
+    "shop_id": "shops",
+    "item": "items",
+    "item_id": "items",
+    "moneda": "monedas",
+    "nivel": "mapas",
+    "skin": "skins",
+    "habilidad": "habilidades",
+    "ventana_id": "ventanas",
+    "bloquear": "booleano",
+    "sprite_id": "sprites",
+    "contador_id": "contadores",
+    "menu_id": "menus",
+}
+
+
+def _param_data_options(pkey):
+    """Devuelve [(valor, etiqueta)] para un param de acción, o None si no es dropdown.
+
+    Devuelve [] si el param es de datos pero su lista está vacía (no se puede
+    crear la opción hasta que haya elementos).
+    """
+    source = DATA_PARAM_SOURCES.get(pkey)
+    if source is None:
+        return None
+    try:
+        if source == "dialogos":
+            from editor.dialog_data import _load_dialogos
+            _load_dialogos()
+            return [(k, k) for k in get_all_dialogo_keys()]
+        if source == "shops":
+            from editor.shops_data import _load_shops, get_all_shops
+            _load_shops()
+            shops = sorted(get_all_shops())
+            if not shops:
+                return []
+            return [("", "(ninguna)")] + [(s, s) for s in shops]
+        if source == "items":
+            from editor.items_data import _load_items, get_item_list
+            _load_items()
+            return get_item_list()
+        if source == "monedas":
+            from editor.monedas_data import _load_monedas, get_monedas
+            _load_monedas()
+            return [(m.get("id", ""), m.get("label") or m.get("id", "")) for m in get_monedas()]
+        if source == "mapas":
+            from editor.widgets.event_constants import get_map_list
+            return get_map_list()
+        if source == "skins":
+            from editor.ability_data import _load_abilities, get_skin_list
+            _load_abilities()
+            return get_skin_list()
+        if source == "habilidades":
+            from editor.ability_data import _load_abilities, get_ability_list
+            _load_abilities()
+            return get_ability_list()
+        if source == "ventanas":
+            from editor.widgets.event_constants import get_param_options
+            return get_param_options("ventana_id")
+        if source == "booleano":
+            return [("True", "Bloquear"), ("False", "Desbloquear")]
+        if source == "sprites":
+            from editor.sprite_registry import get_sprite_options
+            return get_sprite_options()
+        if source == "contadores":
+            from editor.contadores_data import _load_contadores, get_all_contadores
+            _load_contadores()
+            return [(c, c) for c in get_all_contadores()]
+        if source == "menus":
+            from editor.menu.data import _load_menus, get_all_menus
+            _load_menus()
+            return [(m, m) for m in get_all_menus()]
+    except Exception:
+        return []
+    return []
+
 
 class DialogTreePanel(BasePanel):
     def __init__(self, x, y, w, h, i18n):
@@ -88,11 +181,14 @@ class DialogTreePanel(BasePanel):
         self._selected_child = None
         self._selected_choice = None
         self._tree_scroll = 0
-        self._detail_scroll = 0
+        self._options_scroll = 0
         self._action_rebuild = False
         self._dirty = False
         self._node_widgets = {}
         self._detail_widgets = {}
+        self._dropdown_host = _DropdownHost(None)
+        self._options_host = _DropdownHost(None)
+        self._options_top = None
         self._build_ui()
 
     # ── UI ─────────────────────────────────────────────────
@@ -166,7 +262,10 @@ class DialogTreePanel(BasePanel):
     def _build_detail_area(self):
         ep = self._editor_panel
         self._detail_widgets.clear()
-        y = ep.rect.h - 192
+        self._dropdown_host = _DropdownHost(self._editor_panel)
+        self._options_host = _DropdownHost(self._editor_panel)
+        self._options_top = None
+        y = DETAIL_TOP
         ew = ep.rect.w
 
         if self._selected_flat_idx is not None:
@@ -205,81 +304,102 @@ class DialogTreePanel(BasePanel):
                 options = [{"text": "", "choices": []}]
             opt = options[0]
             choices = opt.get("choices", [])
-            scroll = self._detail_scroll
             cy = y
 
-            lbl = pygame_gui.elements.UILabel(
-                pygame.Rect(PADDING, y - scroll, ew - PADDING * 2, 18),
-                f"Options ({len(choices)} choices)", self._gui, container=ep
-            )
-            self._detail_widgets["type_label"] = lbl
-            y += 24
+            save_btn = Button(PADDING, y, 70, 22, text="Guardar",
+                              callback=self._on_save)
+            self._detail_widgets["opt_save"] = save_btn
+            self._dropdown_host.add(save_btn)
+            y += 26
 
-            lbl = pygame_gui.elements.UILabel(
-                pygame.Rect(PADDING, y - scroll, 76, 22), "Pregunta:", self._gui, container=ep
-            )
+            lbl = Label(PADDING, y, 76, 22, "Pregunta:")
             self._detail_widgets["l_opt_pregunta"] = lbl
-            inp = pygame_gui.elements.UITextEntryLine(
-                pygame.Rect(PADDING + 82, y - scroll, ew - PADDING * 2 - 82, 22),
-                initial_text=opt.get("text", ""),
-                manager=self._gui, container=ep
-            )
+            self._dropdown_host.add(lbl)
+            inp = TextInput(PADDING + 82, y, ew - PADDING * 2 - 82, 22,
+                            default=opt.get("text", ""), max_chars=200, numeric_only=False)
             self._detail_widgets["opt_pregunta"] = inp
-            y += 28
+            self._dropdown_host.add(inp)
+            y += 26
+
+            add_btn = Button(PADDING, y, 110, 22, text="Agregar Opción",
+                             callback=self._add_option_choice)
+            self._detail_widgets["opt_add_choice"] = add_btn
+            self._dropdown_host.add(add_btn)
+            del_btn = Button(PADDING + 118, y, 160, 22, text="Eliminar Pregunta",
+                             color=(120, 50, 50), hover_color=(150, 70, 70),
+                             callback=self._delete_option_question)
+            self._detail_widgets["opt_del_question"] = del_btn
+            self._dropdown_host.add(del_btn)
+            y += 26
+
+            sep = Label(PADDING, y, ew - PADDING * 2, 18, "─── opciones ───",
+                        color=(120, 130, 145), font_size=12)
+            self._detail_widgets["l_opt_sep"] = sep
+            self._dropdown_host.add(sep)
+            y += 22
+
+            self._options_top = y
+            cy = y
+            scroll = self._options_scroll
+            n = len(choices)
+            total_filas = sum(
+                2 + len(OPTION_ACTION_FIELDS.get(ch.get("action", ""), []))
+                for ch in choices
+            )
+            has_oscroll = total_filas * 24 > (ep.rect.h - y)
+            ozw = ew - (SCROLLBAR_W if has_oscroll else 0)
 
             for ci, ch in enumerate(choices):
-                lbl = pygame_gui.elements.UILabel(
-                    pygame.Rect(PADDING, y - scroll, 90, 20),
-                    f"Choice {ci + 1}", self._gui, container=ep
-                )
+                lbl = Label(PADDING, y - scroll, 66, 22, f"Opción {ci + 1}:")
                 self._detail_widgets[f"choice_hdr_{ci}"] = lbl
-                del_btn = pygame_gui.elements.UIButton(
-                    pygame.Rect(ew - 26, y - scroll, 22, 20), "X", self._gui, container=ep
-                )
+                self._options_host.add(lbl)
+                inp = TextInput(PADDING + 72, y - scroll, ozw - PADDING * 2 - 72 - 92, 22,
+                                default=ch.get("text", ""), max_chars=200, numeric_only=False)
+                self._detail_widgets[f"choice_text_{ci}"] = inp
+                self._options_host.add(inp)
+                bx = ozw - 26
+                if ci < n - 1:
+                    dn = Button(bx, y - scroll, 20, 20, text="▼",
+                                callback=lambda c=ci: self._move_option_choice(c, 1))
+                    self._detail_widgets[f"choice_down_{ci}"] = dn
+                    self._options_host.add(dn)
+                    bx -= 24
+                if ci > 0:
+                    up = Button(bx, y - scroll, 20, 20, text="▲",
+                                callback=lambda c=ci: self._move_option_choice(c, -1))
+                    self._detail_widgets[f"choice_up_{ci}"] = up
+                    self._options_host.add(up)
+                    bx -= 24
+                del_btn = Button(bx, y - scroll, 20, 20, text="✕",
+                                 callback=lambda c=ci: self._remove_option_choice(c))
                 self._detail_widgets[f"choice_del_{ci}"] = del_btn
+                self._options_host.add(del_btn)
                 y += 24
 
-                lbl = pygame_gui.elements.UILabel(
-                    pygame.Rect(PADDING, y - scroll, 62, 22), "Texto:", self._gui, container=ep
-                )
-                self._detail_widgets[f"l_choice_text_{ci}"] = lbl
-                inp = pygame_gui.elements.UITextEntryLine(
-                    pygame.Rect(PADDING + 68, y - scroll, ew - PADDING * 2 - 68, 22),
-                    initial_text=ch.get("text", ""),
-                    manager=self._gui, container=ep
-                )
-                self._detail_widgets[f"choice_text_{ci}"] = inp
-                y += 26
-
-                lbl = pygame_gui.elements.UILabel(
-                    pygame.Rect(PADDING, y - scroll, 62, 22), "Acción:", self._gui, container=ep
-                )
-                self._detail_widgets[f"l_choice_action_{ci}"] = lbl
+                albl = Label(PADDING + 16, y - scroll, 56, 22, "Acción:")
+                self._detail_widgets[f"l_choice_action_{ci}"] = albl
+                self._options_host.add(albl)
                 opts = [(a, a) for a in OPTION_ACTION_OPTIONS]
-                dd = _TreeDropdown(PADDING + 68, y - scroll, ew - PADDING * 2 - 68, 22,
-                                   opts, selected=ch.get("action", ""))
-                dd._on_select = (lambda val, c=ci: self._on_choice_action_changed(c))
+                dd = SimpleDropdown(PADDING + 76, y - scroll, ozw - PADDING * 2 - 76, 22,
+                                    opts, selected=ch.get("action", ""))
+                dd._on_select = (lambda val, c=ci: self._on_choice_action_changed(c, val))
                 self._detail_widgets[f"choice_action_{ci}"] = dd
-                y += 26
+                self._options_host.add(dd)
+                y += 24
 
-                for pkey, plabel in OPTION_ACTION_FIELDS.get(ch.get("action", ""), []):
-                    lbl = pygame_gui.elements.UILabel(
-                        pygame.Rect(PADDING, y - scroll, 92, 22), plabel, self._gui, container=ep
-                    )
+                action = ch.get("action", "")
+                for pkey, plabel in OPTION_ACTION_FIELDS.get(action, []):
+                    lbl = Label(PADDING + 32, y - scroll, 100, 22, plabel)
                     self._detail_widgets[f"l_choice_param_{ci}_{pkey}"] = lbl
-                    inp = pygame_gui.elements.UITextEntryLine(
-                        pygame.Rect(PADDING + 98, y - scroll, ew - PADDING * 2 - 98, 22),
-                        initial_text=str(ch.get(pkey, "")),
-                        manager=self._gui, container=ep
+                    self._options_host.add(lbl)
+                    w = self._make_param_widget(
+                        PADDING + 136, y - scroll, ozw - PADDING * 2 - 136, 22,
+                        pkey, ch.get(pkey, ""),
                     )
-                    self._detail_widgets[f"choice_param_{ci}_{pkey}"] = inp
-                    y += 26
+                    self._detail_widgets[f"choice_param_{ci}_{pkey}"] = w
+                    self._options_host.add(w)
+                    y += 24
 
-            add_btn = pygame_gui.elements.UIButton(
-                pygame.Rect(PADDING, y - scroll, 90, 22), "+ Choice", self._gui, container=ep
-            )
-            self._detail_widgets["opt_add_choice"] = add_btn
-            y += 28
             self._detail_content_h = y - cy
             return
 
@@ -317,7 +437,7 @@ class DialogTreePanel(BasePanel):
             self._detail_widgets["l_next"] = lbl2
             nids = [n for n in tree["nodes"].keys() if n != self._selected_nid]
             opts = [("", "(ninguno)")] + [(n, n) for n in sorted(nids)]
-            dd = _TreeDropdown(70, y, ew - 80, 22, opts, selected=node.get("next", ""))
+            dd = SimpleDropdown(70, y, ew - 80, 22, opts, selected=node.get("next", ""))
             self._detail_widgets["next"] = dd
             y += 28
 
@@ -347,7 +467,7 @@ class DialogTreePanel(BasePanel):
                 self._detail_widgets[f"choice_text_{ci}"] = inp
                 nids = [n for n in tree["nodes"].keys() if n != self._selected_nid]
                 opts = [("", "(ninguno)")] + [(n, n) for n in sorted(nids)]
-                dd = _TreeDropdown(ew - 120, y, 90, 22, opts, selected=ch.get("next", ""))
+                dd = SimpleDropdown(ew - 120, y, 90, 22, opts, selected=ch.get("next", ""))
                 self._detail_widgets[f"choice_next_{ci}"] = dd
                 del_btn = pygame_gui.elements.UIButton(
                     pygame.Rect(ew - 26, y, 22, 22), "X", self._gui, container=ep
@@ -378,7 +498,7 @@ class DialogTreePanel(BasePanel):
                     opts = [("==", "=="), ("!=", "!="), (">=", ">="), ("<=", "<="),
                             (">", ">"), ("<", "<"), ("es_verdadero", "es_verdadero"),
                             ("es_falso", "es_falso")]
-                    dd = _TreeDropdown(x, y, fw - 4, 22, opts, selected=node.get("operador", "=="))
+                    dd = SimpleDropdown(x, y, fw - 4, 22, opts, selected=node.get("operador", "=="))
                     self._detail_widgets[key] = dd
                 else:
                     inp = pygame_gui.elements.UITextEntryLine(
@@ -395,14 +515,14 @@ class DialogTreePanel(BasePanel):
                 pygame.Rect(PADDING, y, 80, 22), "Si verdad:", self._gui, container=ep
             )
             self._detail_widgets["l_next"] = lbl
-            dd = _TreeDropdown(90, y, ew - 100, 22, opts, selected=node.get("next", ""))
+            dd = SimpleDropdown(90, y, ew - 100, 22, opts, selected=node.get("next", ""))
             self._detail_widgets["next"] = dd
             y += 28
             lbl2 = pygame_gui.elements.UILabel(
                 pygame.Rect(PADDING, y, 80, 22), "Si falso:", self._gui, container=ep
             )
             self._detail_widgets["l_next_false"] = lbl2
-            dd2 = _TreeDropdown(90, y, ew - 100, 22, opts, selected=node.get("next_false", ""))
+            dd2 = SimpleDropdown(90, y, ew - 100, 22, opts, selected=node.get("next_false", ""))
             self._detail_widgets["next_false"] = dd2
 
         elif tipo == "accion":
@@ -420,7 +540,7 @@ class DialogTreePanel(BasePanel):
                 pygame.Rect(PADDING, y, 80, 22), "Acción:", self._gui, container=ep
             )
             self._detail_widgets["l_tipo_accion"] = lbl
-            dd = _TreeDropdown(90, y, ew - 100, 22, opts, selected=node.get("tipo_accion", "set_flag"))
+            dd = SimpleDropdown(90, y, ew - 100, 22, opts, selected=node.get("tipo_accion", "set_flag"))
             self._detail_widgets["tipo_accion"] = dd
             y += 28
             p = node.get("params", {})
@@ -441,7 +561,7 @@ class DialogTreePanel(BasePanel):
                 pygame.Rect(PADDING, y, 80, 22), "Siguiente:", self._gui, container=ep
             )
             self._detail_widgets["l_next"] = lbl
-            dd = _TreeDropdown(90, y, ew - 100, 22, opts, selected=node.get("next", ""))
+            dd = SimpleDropdown(90, y, ew - 100, 22, opts, selected=node.get("next", ""))
             self._detail_widgets["next"] = dd
 
         elif tipo == "salto":
@@ -450,26 +570,44 @@ class DialogTreePanel(BasePanel):
             )
             self._detail_widgets["l_destino"] = lbl
             opts = [("", "(seleccionar)")] + [(k, k) for k in get_all_dialogo_keys()]
-            dd = _TreeDropdown(90, y, ew - 100, 22, opts, selected=node.get("destino", ""))
+            dd = SimpleDropdown(90, y, ew - 100, 22, opts, selected=node.get("destino", ""))
             self._detail_widgets["destino"] = dd
 
         for w in self._detail_widgets.values():
-            if isinstance(w, _TreeDropdown):
-                w.parent = ep
+            if isinstance(w, SimpleDropdown):
+                self._dropdown_host.add(w)
 
     # ── Tree rendering ──
 
     def _get_tree_rect(self):
         ar = self.get_abs_rect()
         ep = self._editor_panel
-        return pygame.Rect(ar.x + ep.rect.x, ar.y + ep.rect.y + 28,
-                           ep.rect.w, ep.rect.h - 220)
+        return pygame.Rect(ar.x + ep.rect.x, ar.y + ep.rect.y + TREE_TOP_OFFSET,
+                           ep.rect.w, TREE_H)
 
     def _get_detail_rect(self):
         ar = self.get_abs_rect()
         ep = self._editor_panel
-        return pygame.Rect(ar.x + ep.rect.x, ar.y + ep.rect.y + ep.rect.h - 192,
-                           ep.rect.w, 192)
+        return pygame.Rect(ar.x + ep.rect.x, ar.y + ep.rect.y + DETAIL_TOP,
+                           ep.rect.w, ep.rect.h - DETAIL_TOP)
+
+    def _get_options_rect(self):
+        ar = self.get_abs_rect()
+        ep = self._editor_panel
+        top = self._options_top
+        if top is None:
+            return None
+        return pygame.Rect(ar.x + ep.rect.x, ar.y + ep.rect.y + top,
+                           ep.rect.w, ep.rect.h - top)
+
+    def _tree_total_rows(self):
+        tree = get_tree_by_key(self._selected_key)
+        if tree:
+            return len(tree["nodes"])
+        filas = len(get_dialogo_by_key(self._selected_key) or [])
+        if get_dialogo_options_by_key(self._selected_key):
+            filas += 1
+        return filas
 
     def _draw_tree(self, surface):
         if not self._selected_key:
@@ -478,6 +616,9 @@ class DialogTreePanel(BasePanel):
         flat = get_dialogo_by_key(self._selected_key)
 
         tr = self._get_tree_rect()
+        total = self._tree_total_rows()
+        has_scroll = total * NODE_H > tr.h
+        tw = tr.w - (SCROLLBAR_W if has_scroll else 0)
         clip = surface.get_clip()
         surface.set_clip(tr)
 
@@ -497,7 +638,7 @@ class DialogTreePanel(BasePanel):
                 visited.append(nid)
                 sy = tr.y + drawn * NODE_H - self._tree_scroll
                 if sy + NODE_H >= tr.y and sy <= tr.y + tr.h:
-                    self._draw_node(surface, tr.x, sy, tr.w, nid, nodes[nid])
+                    self._draw_node(surface, tr.x, sy, tw, nid, nodes[nid])
                 drawn += 1
                 node = nodes[nid]
                 if node["tipo"] == "opcion":
@@ -519,8 +660,8 @@ class DialogTreePanel(BasePanel):
                 if sy + NODE_H >= tr.y and sy <= tr.y + tr.h:
                     sel = i == self._selected_flat_idx
                     bg = (55, 60, 78) if sel else (45, 48, 56)
-                    pygame.draw.rect(surface, bg, (tr.x, sy, tr.w, NODE_H))
-                    pygame.draw.rect(surface, (70, 75, 85), (tr.x, sy, tr.w, NODE_H), 1)
+                    pygame.draw.rect(surface, bg, (tr.x, sy, tw, NODE_H))
+                    pygame.draw.rect(surface, (70, 75, 85), (tr.x, sy, tw, NODE_H), 1)
                     if sel:
                         pygame.draw.rect(surface, (70, 130, 200), (tr.x, sy, 3, NODE_H))
                     badge = pygame.Rect(tr.x + 4, sy + 4, 60, NODE_H - 8)
@@ -532,8 +673,8 @@ class DialogTreePanel(BasePanel):
                     prev_s = fuente.render(txt, True, (180, 190, 200))
                     surface.blit(prev_s, (tr.x + 72, sy + (NODE_H - prev_s.get_height()) // 2))
                     self._node_widgets[f"flat_{i}"] = {
-                        "rect": pygame.Rect(tr.x, sy, tr.w, NODE_H),
-                        "del_rect": pygame.Rect(tr.x + tr.w - 22, sy + 4, 18, NODE_H - 8),
+                        "rect": pygame.Rect(tr.x, sy, tw, NODE_H),
+                        "del_rect": pygame.Rect(tr.x + tw - 22, sy + 4, 18, NODE_H - 8),
                         "flat_idx": i,
                     }
             if options:
@@ -542,8 +683,8 @@ class DialogTreePanel(BasePanel):
                 if sy + NODE_H >= tr.y and sy <= tr.y + tr.h:
                     sel = self._selected_child == "options"
                     bg = (55, 60, 78) if sel else (45, 48, 56)
-                    pygame.draw.rect(surface, bg, (tr.x, sy, tr.w, NODE_H))
-                    pygame.draw.rect(surface, (70, 75, 85), (tr.x, sy, tr.w, NODE_H), 1)
+                    pygame.draw.rect(surface, bg, (tr.x, sy, tw, NODE_H))
+                    pygame.draw.rect(surface, (70, 75, 85), (tr.x, sy, tw, NODE_H), 1)
                     if sel:
                         pygame.draw.rect(surface, (200, 180, 60), (tr.x, sy, 3, NODE_H))
                     badge = pygame.Rect(tr.x + 4, sy + 4, 60, NODE_H - 8)
@@ -559,10 +700,25 @@ class DialogTreePanel(BasePanel):
                     prev_s = fuente.render(preview, True, (180, 190, 200))
                     surface.blit(prev_s, (tr.x + 72, sy + (NODE_H - prev_s.get_height()) // 2))
                     self._node_widgets["options"] = {
-                        "rect": pygame.Rect(tr.x, sy, tr.w, NODE_H),
-                        "del_rect": pygame.Rect(tr.x + tr.w - 22, sy + 4, 18, NODE_H - 8),
+                        "rect": pygame.Rect(tr.x, sy, tw, NODE_H),
+                        "del_rect": pygame.Rect(tr.x + tw - 22, sy + 4, 18, NODE_H - 8),
                         "child": "options",
                     }
+
+        if has_scroll:
+            sb_x = tr.x + tr.w - SCROLLBAR_W
+            track = pygame.Rect(sb_x, tr.y, SCROLLBAR_W, tr.h)
+            pygame.draw.rect(surface, (35, 38, 44), track)
+            thumb_h = max(12, int(tr.h * tr.h / (total * NODE_H)))
+            max_scroll = max(0, total * NODE_H - tr.h)
+            thumb_y = (
+                tr.y + int((self._tree_scroll / max_scroll) * (tr.h - thumb_h))
+                if max_scroll > 0
+                else tr.y
+            )
+            thumb = pygame.Rect(sb_x + 1, thumb_y, SCROLLBAR_W - 2, thumb_h)
+            pygame.draw.rect(surface, (100, 110, 125), thumb)
+            pygame.draw.rect(surface, (130, 140, 155), thumb, 1)
 
         surface.set_clip(clip)
 
@@ -795,7 +951,7 @@ class DialogTreePanel(BasePanel):
         self._selected_nid = nid
         self._selected_flat_idx = None
         self._selected_choice = None
-        self._detail_scroll = 0
+        self._options_scroll = 0
         self._build_ui()
 
     def _save_current_flat_line(self):
@@ -838,15 +994,65 @@ class DialogTreePanel(BasePanel):
                 pkey = "_".join(parts[3:])
                 while len(choices) <= ci:
                     choices.append({"text": "", "action": ""})
-                choices[ci][pkey] = w.get_text()
+                choices[ci][pkey] = w.get_selected() if isinstance(w, SimpleDropdown) else w.get_text()
         opt["choices"] = choices
         set_dialogo_options_by_key(self._selected_key, options)
         self._dirty = True
 
-    def _on_choice_action_changed(self, ci):
+    def _on_choice_action_changed(self, ci, val=None):
+        prev = self._current_choice_action(ci)
+        if val and self._action_has_empty_data(val):
+            self.notify(
+                f"La acción '{val}' requiere datos que están vacíos. No se puede "
+                "crear esta opción hasta que la lista tenga algún elemento.",
+                "error",
+            )
+            dd = self._detail_widgets.get(f"choice_action_{ci}")
+            if dd:
+                dd.set_selected(prev)
+            return
         self._save_current_options()
         self._selected_choice = ci
         self._action_rebuild = True
+
+    def _current_choice_action(self, ci):
+        options = get_dialogo_options_by_key(self._selected_key) if self._selected_key else None
+        if not options:
+            return ""
+        choices = options[0].get("choices", [])
+        if 0 <= ci < len(choices):
+            return choices[ci].get("action", "")
+        return ""
+
+    def _action_has_empty_data(self, action):
+        for pkey, _plabel in OPTION_ACTION_FIELDS.get(action, []):
+            if pkey in DATA_PARAM_SOURCES:
+                opts = _param_data_options(pkey)
+                if opts == []:
+                    return True
+        return False
+
+    def _make_param_widget(self, x, y, w, h, pkey, value):
+        """Crea el widget dinámico para un param de acción.
+
+        - Param de datos (tienda/item/moneda/...): SimpleDropdown con datos reales.
+          Si la lista está vacía, notifica error y devuelve un dropdown bloqueado
+          ("(vacío)") para que no se pueda guardar la opción.
+        - Param numérico: TextInput que solo acepta dígitos.
+        - Resto: TextInput de texto libre (hasta 200 caracteres).
+        """
+        opts = _param_data_options(pkey)
+        if opts is not None:
+            if not opts:
+                dd = SimpleDropdown(x, y, w, h, [("", "(vacío)")], selected="")
+                dd.enabled = False
+                return dd
+            dd = SimpleDropdown(x, y, w, h, opts, selected=str(value) if value else "")
+            dd._on_select = None
+            return dd
+        if pkey in NUMERIC_PARAMS:
+            return TextInput(x, y, w, h, default=str(value), max_chars=8, numeric_only=True)
+        return TextInput(x, y, w, h, default=str(value), max_chars=200, numeric_only=False)
 
     def _add_option_choice(self):
         if self._selected_child != "options" or not self._selected_key:
@@ -865,6 +1071,73 @@ class DialogTreePanel(BasePanel):
         self._dirty = True
         self._build_ui()
 
+    def _delete_option_question(self):
+        if self._selected_child != "options" or not self._selected_key:
+            return
+        if not self._confirm_delete_options():
+            return
+        delete_dialogo_options_by_key(self._selected_key)
+        self._selected_child = None
+        self._selected_flat_idx = None
+        self._selected_choice = None
+        self._options_scroll = 0
+        self._dirty = True
+        self._build_ui()
+
+    def _confirm_delete_options(self):
+        """Modal de confirmación Sí/Cancelar antes de eliminar la pregunta."""
+        font = I18n.instancia().fuente(14) if I18n.instancia() else pygame.font.SysFont("Arial", 14)
+        font_b = I18n.instancia().fuente(14, bold=True) if I18n.instancia() else pygame.font.SysFont("Arial", 14, bold=True)
+        screen = pygame.display.get_surface()
+        W, H = screen.get_width(), screen.get_height()
+        dw, dh = 400, 160
+        dx, dy = (W - dw) // 2, (H - dh) // 2
+        clock = pygame.time.Clock()
+        result = False
+        done = False
+        bg = pygame.Surface((W, H), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 180))
+        btn_si = pygame.Rect(dx + dw - 220, dy + dh - 50, 90, 30)
+        btn_no = pygame.Rect(dx + dw - 120, dy + dh - 50, 90, 30)
+        while not done:
+            clock.tick(30)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        done = True
+                    elif event.key == pygame.K_RETURN:
+                        result = True
+                        done = True
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if btn_si.collidepoint(event.pos):
+                        result = True
+                        done = True
+                    elif btn_no.collidepoint(event.pos):
+                        done = True
+            screen.blit(bg, (0, 0))
+            pygame.draw.rect(screen, (45, 50, 58), (dx, dy, dw, dh))
+            pygame.draw.rect(screen, (70, 80, 95), (dx, dy, dw, dh), 2)
+            title = font_b.render("Eliminar pregunta", True, (220, 190, 120))
+            screen.blit(title, (dx + (dw - title.get_width()) // 2, dy + 18))
+            msg = font.render("Se eliminará el Options completo de este diálogo.", True, (220, 220, 220))
+            screen.blit(msg, (dx + (dw - msg.get_width()) // 2, dy + 58))
+            msg2 = font.render("¿Continuar?", True, (180, 190, 200))
+            screen.blit(msg2, (dx + (dw - msg2.get_width()) // 2, dy + 84))
+            pygame.draw.rect(screen, (120, 50, 50), btn_si)
+            pygame.draw.rect(screen, (150, 70, 70), btn_si, 1)
+            si_s = font_b.render("Sí", True, (255, 255, 255))
+            screen.blit(si_s, (btn_si.x + (btn_si.w - si_s.get_width()) // 2,
+                               btn_si.y + (btn_si.h - si_s.get_height()) // 2))
+            pygame.draw.rect(screen, (60, 70, 80), btn_no)
+            pygame.draw.rect(screen, (80, 90, 105), btn_no, 1)
+            no_s = font_b.render("No", True, (220, 220, 220))
+            screen.blit(no_s, (btn_no.x + (btn_no.w - no_s.get_width()) // 2,
+                               btn_no.y + (btn_no.h - no_s.get_height()) // 2))
+            pygame.display.flip()
+        return result
+
     def _remove_option_choice(self, idx):
         if self._selected_child != "options" or not self._selected_key:
             return
@@ -878,6 +1151,24 @@ class DialogTreePanel(BasePanel):
         options[0]["choices"] = choices
         set_dialogo_options_by_key(self._selected_key, options)
         self._selected_choice = None
+        self._dirty = True
+        self._build_ui()
+
+    def _move_option_choice(self, idx, delta):
+        if self._selected_child != "options" or not self._selected_key:
+            return
+        self._save_current_options()
+        options = get_dialogo_options_by_key(self._selected_key)
+        if not options:
+            return
+        choices = options[0].get("choices", [])
+        j = idx + delta
+        if not (0 <= j < len(choices)):
+            return
+        choices[idx], choices[j] = choices[j], choices[idx]
+        options[0]["choices"] = choices
+        set_dialogo_options_by_key(self._selected_key, options)
+        self._selected_choice = j
         self._dirty = True
         self._build_ui()
 
@@ -1053,7 +1344,6 @@ class DialogTreePanel(BasePanel):
             if el == self._detail_widgets.get("flat_down"): self._move_flat_line(1); return True
             if el == self._detail_widgets.get("flat_add"): self._add_flat_line(); return True
             if el == self._detail_widgets.get("choice_add"): self._add_choice(); return True
-            if el == self._detail_widgets.get("opt_add_choice"): self._add_option_choice(); return True
             for key, w in self._detail_widgets.items():
                 if key.startswith("choice_del_") and el == w:
                     if self._selected_child == "options":
@@ -1073,8 +1363,20 @@ class DialogTreePanel(BasePanel):
                 self._selected_flat_idx = None
                 self._selected_child = None
                 self._selected_choice = None
-                self._detail_scroll = 0
+                self._options_scroll = 0
                 self._build_ui()
+                return True
+
+        # Detail custom widgets (dropdowns, text inputs, buttons) — before node
+        # clicks / tree wheel so an open dropdown captures wheel and outside-click
+        # closes without selecting tree nodes.
+        for key, w in list(self._detail_widgets.items()):
+            if not isinstance(w, (SimpleDropdown, TextInput, Button)):
+                continue
+            if w.handle_event(e):
+                if self._action_rebuild:
+                    self._action_rebuild = False
+                    self._build_ui()
                 return True
 
         # Custom node/line click handling
@@ -1095,7 +1397,7 @@ class DialogTreePanel(BasePanel):
                         self._selected_nid = None
                         self._selected_child = None
                         self._selected_choice = None
-                        self._detail_scroll = 0
+                        self._options_scroll = 0
                         self._build_ui()
                     elif "child" in info:
                         self._save_current_flat_line()
@@ -1104,7 +1406,7 @@ class DialogTreePanel(BasePanel):
                         self._selected_flat_idx = None
                         self._selected_nid = None
                         self._selected_choice = None
-                        self._detail_scroll = 0
+                        self._options_scroll = 0
                         self._build_ui()
                     else:
                         self._select_node(nid)
@@ -1115,33 +1417,19 @@ class DialogTreePanel(BasePanel):
             tr = self._get_tree_rect()
             mx, my = pygame.mouse.get_pos()
             if self._selected_child == "options":
-                dr = self._get_detail_rect()
-                if dr and dr.collidepoint(mx, my):
+                oz = self._get_options_rect()
+                if oz and oz.collidepoint(mx, my):
                     content = getattr(self, "_detail_content_h", 0)
-                    max_scroll = max(0, content - 192)
-                    self._detail_scroll = max(0, min(max_scroll,
-                                                     self._detail_scroll - e.y * 24))
-                    self._build_ui()
+                    max_scroll = max(0, content - oz.h)
+                    nuevo = max(0, min(max_scroll, self._options_scroll - e.y * 24))
+                    if nuevo != self._options_scroll:
+                        self._options_scroll = nuevo
+                        self._build_ui()
                     return True
             if tr and tr.collidepoint(mx, my):
-                tree = get_tree_by_key(self._selected_key)
-                filas = 0
-                if tree:
-                    filas = len(tree["nodes"])
-                else:
-                    filas = len(get_dialogo_by_key(self._selected_key) or [])
-                    if get_dialogo_options_by_key(self._selected_key):
-                        filas += 1
+                filas = self._tree_total_rows()
                 max_scroll = max(0, filas * NODE_H - tr.h)
                 self._tree_scroll = max(0, min(max_scroll, self._tree_scroll - e.y * NODE_H))
-                return True
-
-        # Detail dropdowns
-        for key, w in list(self._detail_widgets.items()):
-            if isinstance(w, (_TreeDropdown,)) and w.handle_event(e):
-                if self._action_rebuild:
-                    self._action_rebuild = False
-                    self._build_ui()
                 return True
 
         return True
@@ -1151,11 +1439,43 @@ class DialogTreePanel(BasePanel):
             return
         r = self.get_abs_rect()
         pygame.draw.rect(surface, self.bg_color, r)
-        self._gui.draw_ui(surface.subsurface(r))
+        sub = surface.subsurface(r)
+        self._gui.draw_ui(sub)
         self._draw_tree(surface)
-        for w in self._detail_widgets.values():
-            if isinstance(w, _TreeDropdown):
-                w.draw(surface)
+        for w in self._dropdown_host.children:
+            w.draw(sub)
+
+        # Zona de opciones: clip propio + scrollbar visible.
+        ep = self._editor_panel
+        if self._options_top is not None:
+            oz = pygame.Rect(ep.rect.x, ep.rect.y + self._options_top,
+                             ep.rect.w, ep.rect.h - self._options_top)
+            old_clip = sub.get_clip()
+            sub.set_clip(oz)
+            abiertos = []
+            for w in self._options_host.children:
+                w.draw(sub)
+                if getattr(w, "_open", False):
+                    abiertos.append(w)
+            content = getattr(self, "_detail_content_h", 0)
+            visible = oz.h
+            if content > visible:
+                sb_x = oz.x + oz.w - SCROLLBAR_W
+                track = pygame.Rect(sb_x, oz.y, SCROLLBAR_W, visible)
+                pygame.draw.rect(sub, (35, 38, 44), track)
+                thumb_h = max(12, int(visible * visible / content))
+                max_scroll = max(0, content - visible)
+                thumb_y = (
+                    oz.y + int((self._options_scroll / max_scroll) * (visible - thumb_h))
+                    if max_scroll > 0
+                    else oz.y
+                )
+                thumb = pygame.Rect(sb_x + 1, thumb_y, SCROLLBAR_W - 2, thumb_h)
+                pygame.draw.rect(sub, (100, 110, 125), thumb)
+                pygame.draw.rect(sub, (130, 140, 155), thumb, 1)
+            sub.set_clip(old_clip)
+            for w in abiertos:
+                w.draw(sub)
 
     def set_size(self, w, h):
         if self.rect.w != w or self.rect.h != h:
@@ -1167,14 +1487,32 @@ class DialogTreePanel(BasePanel):
 
 # ── Helpers ──
 
-from editor.dialog_tree_dropdown import TreeDropdown as _TreeDropdown
-
 
 class _FakeInput:
     def __init__(self, default=""):
         self._text = default
     def get_text(self):
         return self._text
+
+
+class _DropdownHost:
+    """Contenedor que agrupa los SimpleDropdown del detalle.
+
+    El UIPanel de pygame_gui no expone una lista .children con los widgets
+    custom, así que este host la mantiene para que SimpleDropdown pueda
+    cerrar los demás (close_others) y elevar el abierto (bring_to_front).
+    """
+
+    def __init__(self, ep):
+        self.ep = ep
+        self.children = []
+
+    def get_abs_rect(self):
+        return self.ep.get_abs_rect()
+
+    def add(self, w):
+        w.parent = self
+        self.children.append(w)
 
 
 class _FakeDropdown:

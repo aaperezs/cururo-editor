@@ -136,6 +136,20 @@ def set_dialogo_options_by_key(key, options):
     return set_dialogo_options(personaje, contexto, options)
 
 
+def delete_dialogo_options(personaje, contexto):
+    d = _DIALOGOS_DATA.get(personaje, {}).get(contexto)
+    if isinstance(d, dict) and "options" in d:
+        del d["options"]
+        _save_dialogos()
+        return True
+    return False
+
+
+def delete_dialogo_options_by_key(key):
+    personaje, contexto = _parse_key(key)
+    return delete_dialogo_options(personaje, contexto)
+
+
 def set_dialogo(personaje, contexto, lineas):
     if personaje not in _DIALOGOS_DATA:
         _DIALOGOS_DATA[personaje] = {}
