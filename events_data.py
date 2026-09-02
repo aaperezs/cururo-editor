@@ -35,18 +35,77 @@ GLOBAL_TRIGGERS = ["on_boss_defeated", "on_event_finalized"]
 # ── Acciones que afectan tiendas ──────────────────────────────
 
 GLOBAL_ACTION_TYPES = {
-    "restock_shop": {
-        "label": "Restockear Tienda",
-        "params": {"shop_id": "", "item_id": ""},
-    },
-    "add_shop_stock": {
-        "label": "Agregar Stock",
-        "params": {"shop_id": "", "item_id": "", "cantidad": 1},
-    },
-    "modify_shop_price": {
-        "label": "Modificar Precio",
-        "params": {"shop_id": "", "item_id": "", "moneda": "", "precio": 0},
-    },
+    # ── Mensajes y UI ──
+    "show_message": {"label": "Mostrar Mensaje", "params": {"mensaje": ""}},
+    "mostrar_ventana": {"label": "Mostrar Ventana", "params": {"ventana_id": ""}},
+    "mostrar_opciones": {"label": "Mostrar Opciones", "params": {"opciones": []}},
+    "mostrar_personaje": {"label": "Mostrar Personaje", "params": {"personaje_id": "", "posicion": "centro", "expresion": "normal"}},
+    "ocultar_personaje": {"label": "Ocultar Personaje", "params": {"personaje_id": ""}},
+    "ocultar_todos_personajes": {"label": "Ocultar Todos", "params": {}},
+    "cambiar_fondo": {"label": "Cambiar Fondo", "params": {"sprite_id": "", "modo": "fill"}},
+    # ── Diálogo ──
+    "start_dialogue": {"label": "Iniciar Diálogo", "params": {"dialogo_id": ""}},
+    "close_dialog": {"label": "Cerrar Diálogo", "params": {}},
+    "dialogo_inline": {"label": "Diálogo Inline", "params": {"lineas": [], "quien": ""}},
+    "dialogo_tree": {"label": "Árbol de Diálogo", "params": {"dialogo_id": ""}},
+    # ── Sprite y Mapa ──
+    "replace_sprite": {"label": "Reemplazar Sprite", "params": {"sprite_id": ""}},
+    "remove_sprite": {"label": "Eliminar Sprite", "params": {}},
+    "spawn_entity": {"label": "Generar Entidad", "params": {"sprite_id": "", "offset_x": 0, "offset_y": 0, "z": 0}},
+    "change_map": {"label": "Cambiar Mapa", "params": {"nivel": "", "exit_id": ""}},
+    # ── Jugador ──
+    "give_item": {"label": "Dar Objeto", "params": {"item": "", "cantidad": 1}},
+    "remove_item": {"label": "Quitar Objeto", "params": {"item": "", "cantidad": 1}},
+    "give_moneda": {"label": "Dar Moneda", "params": {"moneda": "", "cantidad": 1}},
+    "remove_moneda": {"label": "Quitar Moneda", "params": {"moneda": "", "cantidad": 1}},
+    "remove_escamas": {"label": "Quitar Escamas", "params": {"cantidad": 1}},
+    "avanzar": {"label": "Avanzar", "params": {"direccion": ""}},
+    "despertar": {"label": "Despertar", "params": {}},
+    "cambiar_skin": {"label": "Cambiar Skin", "params": {"skin": ""}},
+    "bloquear_mandos": {"label": "Bloquear Mandos", "params": {"bloquear": True}},
+    # ── Combate ──
+    "damage": {"label": "Daño", "params": {"cantidad": 1, "mensaje": ""}},
+    "start_boss_fight": {"label": "Iniciar Boss Fight", "params": {}},
+    "mostrar_boss": {"label": "Mostrar Boss", "params": {"visible": True}},
+    # ── Habilidades ──
+    "consume_pp": {"label": "Consumir PP", "params": {"cantidad": 1}},
+    "desbloquear_habilidad": {"label": "Desbloquear Habilidad", "params": {"habilidad": ""}},
+    "equipar_habilidad": {"label": "Equipar Habilidad", "params": {"habilidad": ""}},
+    # ── Flags y Contadores ──
+    "set_flag": {"label": "Establecer Flag", "params": {"flag": ""}},
+    "clear_flag": {"label": "Limpiar Flag", "params": {"flag": ""}},
+    "add_flag": {"label": "Incrementar Flag", "params": {"flag": "", "cantidad": 1}},
+    "increment_contador": {"label": "Incrementar Contador", "params": {"contador_id": "", "cantidad": 1}},
+    "set_contador": {"label": "Establecer Contador", "params": {"contador_id": "", "valor": 0}},
+    # ── Tienda ──
+    "open_shop": {"label": "Abrir Tienda", "params": {"shop_id": ""}},
+    "close_shop": {"label": "Cerrar Tienda", "params": {}},
+    "abrir_menu": {"label": "Abrir Menú", "params": {"menu_id": ""}},
+    "restock_shop": {"label": "Restockear Tienda", "params": {"shop_id": "", "item_id": ""}},
+    "add_shop_stock": {"label": "Agregar Stock", "params": {"shop_id": "", "item_id": "", "cantidad": 1}},
+    "modify_shop_price": {"label": "Modificar Precio", "params": {"shop_id": "", "item_id": "", "moneda": "", "precio": 0}},
+    # ── Audio ──
+    "play_bgm": {"label": "Reproducir Música", "params": {"asset_id": "", "fade_ms": 0}},
+    "stop_bgm": {"label": "Detener Música", "params": {"fade_ms": 0}},
+    "play_sfx": {"label": "Reproducir Efecto", "params": {"asset_id": ""}},
+    "set_bgm_volume": {"label": "Volumen Música", "params": {"volumen": 1.0}},
+    "set_sfx_volume": {"label": "Volumen Efectos", "params": {"volumen": 1.0}},
+    "set_volume": {"label": "Volumen General", "params": {"volumen": 1.0}},
+    # ── Sistema ──
+    "set_resolution": {"label": "Cambiar Resolución", "params": {"ancho": 0, "alto": 0}},
+    "run_script": {"label": "Ejecutar Script", "params": {"function_name": "", "args": ""}},
+    "save_game": {"label": "Guardar Juego", "params": {"slot": 1, "dev": False}},
+    "load_game": {"label": "Cargar Juego", "params": {"slot": 1, "dev": False}},
+    "open_save_menu": {"label": "Abrir Menú Guardar", "params": {}},
+    "open_load_menu": {"label": "Abrir Menú Cargar", "params": {}},
+    "close_save_menu": {"label": "Cerrar Menú Guardar", "params": {}},
+    "mover_a": {"label": "Mover a Evento", "params": {"evento_id": ""}},
+    "examinar_key_item": {"label": "Examinar Objeto Clave", "params": {"item": ""}},
+    # ── Escenas y Minijuegos ──
+    "ir_a_escena": {"label": "Ir a Escena", "params": {"capitulo": 0, "escena": 0}},
+    "iniciar_minijuego": {"label": "Iniciar Minijuego", "params": {"minijuego_id": ""}},
+    "iniciar_demo": {"label": "Iniciar Demo", "params": {"demo_id": ""}},
+    "fin_demo": {"label": "Fin Demo", "params": {}},
 }
 
 

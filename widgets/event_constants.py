@@ -96,8 +96,22 @@ def get_param_options(pk: str, ct: str | None = None) -> list[tuple[str, str]]:
         return []
     if pk == "direccion":
         return [("ARRIBA", "Arriba"), ("ABAJO", "Abajo"), ("IZQUIERDA", "Izquierda"), ("DERECHA", "Derecha")]
-    if pk == "tecla":
-        return [("Q", "Q (Habilidad)")]
+    if pk == "personaje_id":
+        return [("", "(ninguno)")]
+    if pk == "posicion":
+        return [("izquierda", "Izquierda"), ("centro", "Centro"), ("derecha", "Derecha")]
+    if pk == "expresion":
+        return [("normal", "Normal"), ("sorprendido", "Sorprendido"), ("triste", "Triste"), ("enojado", "Enojado")]
+    if pk == "modo":
+        return [("fill", "Rellenar"), ("tile", "Mosaico")]
+    if pk == "menu_id":
+        return [("inventory", "Inventario"), ("skills", "Habilidades"), ("map", "Mapa")]
+    if pk == "minijuego_id":
+        return [("", "(ninguno)")]
+    if pk == "contador_id":
+        return [("", "(ninguno)")]
+    if pk == "item_id":
+        return get_item_list()
     return []
 
 
@@ -106,24 +120,54 @@ def get_param_options(pk: str, ct: str | None = None) -> list[tuple[str, str]]:
 TRIGGERS = ["contact", "interact", "on_hit", "on_boss_defeated", "on_event_finalized"]
 
 CONDITION_TYPES = [
+    # ── Condiciones originales (con operadores) ──
     "has_moneda", "item_count", "flag", "ability", "ability_equipped", "pp",
     "evaluar_evento", "damage",
+    # ── Condiciones simples (sin operadores) ──
+    "has_ability", "has_ability_equipped", "has_escamas", "has_flag",
+    "has_item", "has_pp",
+    "not_has_ability", "not_has_ability_equipped", "not_has_escamas",
+    "not_has_flag", "not_has_item",
+    # ── Condiciones especializadas ──
+    "attack_type", "escamas",
 ]
 
 ACTION_TYPES = [
-    "show_message", "replace_sprite", "remove_sprite", "spawn_entity",
-    "start_dialogue", "change_map", "mover_a",
-    "give_item", "remove_item", "consume_pp",
-    "set_flag", "clear_flag", "give_moneda", "remove_moneda", "damage",
-    "run_script", "start_boss_fight", "iniciar_dialogo", "esperar",
-    "bloquear_eventos", "bloquear_mandos",
-    "desbloquear_habilidad", "equipar_habilidad", "cambiar_skin",
-    "mostrar_boss", "iniciar_demo", "mostrar_ventana",
-    "avanzar", "accion_botton",
-    "open_shop", "close_shop", "dialogo_tree",
+    # ── Mensajes y UI ──
+    "show_message", "mostrar_ventana", "mostrar_opciones",
+    "mostrar_personaje", "ocultar_personaje", "ocultar_todos_personajes",
+    "cambiar_fondo",
+    # ── Diálogo ──
+    "start_dialogue", "close_dialog", "dialogo_inline", "dialogo_tree",
+    # ── Sprite y Mapa ──
+    "replace_sprite", "remove_sprite", "spawn_entity", "change_map",
+    # ── Jugador ──
+    "give_item", "remove_item", "give_moneda", "remove_moneda",
+    "remove_escamas", "avanzar", "despertar", "cambiar_skin",
+    "bloquear_mandos",
+    # ── Combate ──
+    "damage", "start_boss_fight", "mostrar_boss",
+    # ── Habilidades ──
+    "consume_pp", "desbloquear_habilidad", "equipar_habilidad",
+    # ── Flags y Contadores ──
+    "set_flag", "clear_flag", "add_flag",
+    "increment_contador", "set_contador",
+    # ── Tienda ──
+    "open_shop", "close_shop", "abrir_menu",
+    "restock_shop", "add_shop_stock", "modify_shop_price",
+    # ── Audio ──
+    "play_bgm", "stop_bgm", "play_sfx",
+    "set_bgm_volume", "set_sfx_volume", "set_volume",
+    # ── Sistema ──
+    "set_resolution", "run_script", "save_game", "load_game",
+    "open_save_menu", "open_load_menu", "close_save_menu",
+    "mover_a", "examinar_key_item",
+    # ── Escenas y Minijuegos ──
+    "ir_a_escena", "iniciar_minijuego", "iniciar_demo", "fin_demo",
 ]
 
 CONDITION_PARAMS: dict[str, dict[str, Any]] = {
+    # ── Condiciones originales (con operadores) ──
     "has_moneda": {"moneda": "", "operador": ">=", "valor": 1},
     "item_count": {"item": "", "operador": ">=", "valor": 1},
     "flag": {"flag": "", "operador": "es_verdadero"},
@@ -132,48 +176,104 @@ CONDITION_PARAMS: dict[str, dict[str, Any]] = {
     "pp": {"operador": ">=", "valor": 1},
     "evaluar_evento": {"evento_id": "", "estado": "finalizado"},
     "damage": {"operador": ">=", "valor": 1},
+    # ── Condiciones simples (sin operadores) ──
+    "has_ability": {"ability": ""},
+    "has_ability_equipped": {"ability": ""},
+    "has_escamas": {},
+    "has_flag": {"flag": ""},
+    "has_item": {"item": ""},
+    "has_pp": {},
+    "not_has_ability": {"ability": ""},
+    "not_has_ability_equipped": {"ability": ""},
+    "not_has_escamas": {},
+    "not_has_flag": {"flag": ""},
+    "not_has_item": {"item": ""},
+    # ── Condiciones especializadas ──
+    "attack_type": {"attack_type": ""},
+    "escamas": {"operador": ">=", "valor": 1},
 }
 
 ACTION_PARAMS: dict[str, dict[str, Any]] = {
+    # ── Mensajes y UI ──
     "show_message": {"mensaje": ""},
+    "mostrar_ventana": {"ventana_id": ""},
+    "mostrar_opciones": {"opciones": []},
+    "mostrar_personaje": {"personaje_id": "", "posicion": "centro", "expresion": "normal"},
+    "ocultar_personaje": {"personaje_id": ""},
+    "ocultar_todos_personajes": {},
+    "cambiar_fondo": {"sprite_id": "", "modo": "fill"},
+    # ── Diálogo ──
+    "start_dialogue": {"dialogo_id": ""},
+    "close_dialog": {},
+    "dialogo_inline": {"lineas": [], "quien": ""},
+    "dialogo_tree": {"dialogo_id": ""},
+    # ── Sprite y Mapa ──
     "replace_sprite": {"sprite_id": ""},
     "remove_sprite": {},
     "spawn_entity": {"sprite_id": "", "offset_x": 0, "offset_y": 0, "z": 0},
-    "start_dialogue": {"dialogo_id": ""},
     "change_map": {"nivel": "", "exit_id": ""},
-    "mover_a": {"evento_id": ""},
+    # ── Jugador ──
     "give_item": {"item": "", "cantidad": 1},
     "remove_item": {"item": "", "cantidad": 1},
-    "consume_pp": {"cantidad": 1},
-    "set_flag": {"flag": ""},
-    "clear_flag": {"flag": ""},
     "give_moneda": {"moneda": "", "cantidad": 1},
     "remove_moneda": {"moneda": "", "cantidad": 1},
-    "damage": {"cantidad": 1, "mensaje": ""},
-    "run_script": {"function_name": "", "args": ""},
-    "start_boss_fight": {},
-    "iniciar_dialogo": {"dialogo_id": ""},
-    "esperar": {"segundos": 1},
-    "bloquear_eventos": {"bloquear": True},
+    "remove_escamas": {"cantidad": 1},
+    "avanzar": {"direccion": ""},
+    "despertar": {},
+    "cambiar_skin": {"skin": ""},
     "bloquear_mandos": {"bloquear": True},
+    # ── Combate ──
+    "damage": {"cantidad": 1, "mensaje": ""},
+    "start_boss_fight": {},
+    "mostrar_boss": {"visible": True},
+    # ── Habilidades ──
+    "consume_pp": {"cantidad": 1},
     "desbloquear_habilidad": {"habilidad": ""},
     "equipar_habilidad": {"habilidad": ""},
-    "cambiar_skin": {"skin": ""},
-    "mostrar_boss": {"visible": True},
-    "iniciar_demo": {"demo_id": ""},
-    "mostrar_ventana": {"ventana_id": ""},
-    "avanzar": {"direccion": ""},
-    "accion_botton": {"tecla": ""},
+    # ── Flags y Contadores ──
+    "set_flag": {"flag": ""},
+    "clear_flag": {"flag": ""},
+    "add_flag": {"flag": "", "cantidad": 1},
+    "increment_contador": {"contador_id": "", "cantidad": 1},
+    "set_contador": {"contador_id": "", "valor": 0},
+    # ── Tienda ──
     "open_shop": {"shop_id": ""},
     "close_shop": {},
-    "dialogo_tree": {"dialogo_id": ""},
+    "abrir_menu": {"menu_id": ""},
+    "restock_shop": {"shop_id": "", "item_id": ""},
+    "add_shop_stock": {"shop_id": "", "item_id": "", "cantidad": 1},
+    "modify_shop_price": {"shop_id": "", "item_id": "", "moneda": "", "precio": 0},
+    # ── Audio ──
+    "play_bgm": {"asset_id": "", "fade_ms": 0},
+    "stop_bgm": {"fade_ms": 0},
+    "play_sfx": {"asset_id": ""},
+    "set_bgm_volume": {"volumen": 1.0},
+    "set_sfx_volume": {"volumen": 1.0},
+    "set_volume": {"volumen": 1.0},
+    # ── Sistema ──
+    "set_resolution": {"ancho": 0, "alto": 0},
+    "run_script": {"function_name": "", "args": ""},
+    "save_game": {"slot": 1, "dev": False},
+    "load_game": {"slot": 1, "dev": False},
+    "open_save_menu": {},
+    "open_load_menu": {},
+    "close_save_menu": {},
+    "mover_a": {"evento_id": ""},
+    "examinar_key_item": {"item": ""},
+    # ── Escenas y Minijuegos ──
+    "ir_a_escena": {"capitulo": 0, "escena": 0},
+    "iniciar_minijuego": {"minijuego_id": ""},
+    "iniciar_demo": {"demo_id": ""},
+    "fin_demo": {},
 }
 
 # Param keys that should show a dropdown instead of text field
 DROPDOWN_PARAMS = {
     "ability", "item", "sprite_id", "nivel", "operador", "estado",
     "bloquear", "visible", "habilidad", "demo_id", "boss_id",
-    "ventana_id", "direccion", "tecla", "moneda", "shop_id",
+    "ventana_id", "direccion", "moneda", "shop_id", "item_id",
+    "personaje_id", "posicion", "expresion", "modo", "menu_id",
+    "minijuego_id", "contador_id",
 }
 
 # Operator options per condition type
