@@ -45,7 +45,7 @@ GLOBAL_ACTION_TYPES = {
     "cambiar_fondo": {"label": "Cambiar Fondo", "params": {"sprite_id": "", "modo": "fill"}},
     # ── Diálogo ──
     "start_dialogue": {"label": "Iniciar Diálogo", "params": {"dialogo_id": ""}},
-    "close_dialog": {"label": "Cerrar Diálogo", "params": {}},
+    "close_dialog": {"label": "Cerrar Diálogo", "params": {"farewell_text": ""}},
     "dialogo_inline": {"label": "Diálogo Inline", "params": {"lineas": [], "quien": ""}},
     "dialogo_tree": {"label": "Árbol de Diálogo", "params": {"dialogo_id": ""}},
     # ── Sprite y Mapa ──

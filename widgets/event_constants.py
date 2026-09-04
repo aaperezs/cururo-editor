@@ -204,7 +204,7 @@ ACTION_PARAMS: dict[str, dict[str, Any]] = {
     "cambiar_fondo": {"sprite_id": "", "modo": "fill"},
     # ── Diálogo ──
     "start_dialogue": {"dialogo_id": ""},
-    "close_dialog": {},
+    "close_dialog": {"farewell_text": ""},
     "dialogo_inline": {"lineas": [], "quien": ""},
     "dialogo_tree": {"dialogo_id": ""},
     # ── Sprite y Mapa ──
