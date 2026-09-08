@@ -2,7 +2,16 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Editor root contains 'engine/' package. When engine is at editor/engine/,
+# editor_root = editor/. When engine is at project/engine/, editor/ won't exist here.
+_engine_dir = os.path.dirname(os.path.abspath(__file__))
+_editor_root = os.path.dirname(_engine_dir)
+if os.path.isdir(os.path.join(_editor_root, "engine")):
+    sys.path.insert(0, _editor_root)
+# Also add grandparent so 'editor.project' is importable during development.
+_grandparent = os.path.dirname(_editor_root)
+if _grandparent not in sys.path:
+    sys.path.insert(0, _grandparent)
 
 _MODO_TEST = "--test" in sys.argv
 
@@ -23,9 +32,11 @@ else:
 import pygame
 
 # Set up project path for editor data modules
-from editor.project import set_current_project
-
-set_current_project(_PROJECT_PATH)
+try:
+    from editor.project import set_current_project
+    set_current_project(_PROJECT_PATH)
+except ImportError:
+    pass
 
 # Resolución base del proyecto (la define el desarrollador en cururo.json).
 # Debe fijarse ANTES de que los demás módulos importen ANCHO/ALTO.
