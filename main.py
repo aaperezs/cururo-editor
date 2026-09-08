@@ -475,14 +475,15 @@ exe = EXE(
                 creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
             )
             return
-        # El motor vive en project/engine/
-        main_py = os.path.join(p.root, "engine", "main.py")
+        # El motor vive en editor/engine/ y corre desde ahí
+        editor_root = os.path.dirname(os.path.abspath(__file__))
+        main_py = os.path.join(editor_root, "engine", "main.py")
         if not os.path.exists(main_py):
             print(f"[Menu] No se encuentra el motor en {main_py}")
             return
         subprocess.Popen(
             [sys.executable, main_py, "--project", p.root],
-            cwd=p.root,
+            cwd=editor_root,
             creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
         )
 
