@@ -117,7 +117,14 @@ def get_param_options(pk: str, ct: str | None = None) -> list[tuple[str, str]]:
 
 # ── Trigger / Condition / Action types ─────────────────────
 
-TRIGGERS = ["contact", "interact", "on_hit", "on_boss_defeated", "on_event_finalized"]
+TRIGGERS = ["contact", "interact", "on_hit", "on_boss_defeated", "on_event_finalized", "onload"]
+
+PRELOAD_DEFAULT = {
+    "no_comida": False,
+    "no_enemigos": False,
+    "flags_iniciales": {},
+    "musica": ""
+}
 
 CONDITION_TYPES = [
     # ── Condiciones originales (con operadores) ──

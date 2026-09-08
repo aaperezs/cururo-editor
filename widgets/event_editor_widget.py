@@ -734,9 +734,16 @@ class EventEditorWidget(Widget):
         header = f"{i.t(f'entity.{sid}')} @ {self.selected_pos} (Z={self.selected_z})"
         surface.blit(fonte.render(header, True, COL_TEXT), (r.x + 10, r.y + 6))
 
-        is_spawn = self._spawn_pos == tuple(self.selected_pos) if self.selected_pos else False
-        spawn_bg = (130, 60, 20) if is_spawn else COL_FIELD_BG
-        spawn_text = i.t("event.spawn_here") if not is_spawn else f"{i.t('event.spawn_remove')} ({self._spawn_pos[0]},{self._spawn_pos[1]})"
+        from editor.project import get_global_spawn
+        global_spawn = get_global_spawn()
+        if global_spawn:
+            map_id = global_spawn.get("map_id", "?")
+            pos = global_spawn.get("pos", [0, 0])
+            spawn_text = f"Spawn: {map_id} ({pos[0]},{pos[1]})"
+            spawn_bg = COL_FIELD_BG
+        else:
+            spawn_text = "Sin spawn definido"
+            spawn_bg = (80, 30, 30)
         spawn_rect = pygame.Rect(r.x + 10, r.y + 28, r.w - 20, 22)
         pygame.draw.rect(surface, spawn_bg, spawn_rect)
         pygame.draw.rect(surface, COL_FIELD_BORDER, spawn_rect, 1)

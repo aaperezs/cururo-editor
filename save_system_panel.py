@@ -2,10 +2,13 @@ import pygame
 
 from editor.panels.base_panel import BasePanel
 from editor.widgets.button import Button
+from editor.widgets.checkbox import Checkbox
 from editor.widgets.label import Label
 from editor.widgets.panel import Panel
 from editor.widgets.text_input import TextInput
+from editor.widgets.simple_dropdown import SimpleDropdown
 from editor.project import get_current_project
+from editor import items_data
 from editor.save_system_data import (
     _load_config,
     get_config,
@@ -28,6 +31,7 @@ class SaveSystemTab(BasePanel):
         super().__init__(x, y, w, h, i18n)
         self.bg_color = (30, 32, 36)
         _load_config()
+        items_data._load_items()
         self._config = get_config()
         self._status_text = ""
         self._status_error = False
@@ -69,7 +73,16 @@ class SaveSystemTab(BasePanel):
         self._slots_input = self._add_field("Slots totales:", str(self._config.get("slots", 10)), y, "slots")
         y += ROW_H + 4
 
-        self._item_input = self._add_field("Item requerido:", self._config.get("save_point_item_id", "cinta_guardado"), y, "save_point_item_id")
+        item_options = [("", "(ninguno)")]
+        for iid, nombre in items_data.get_item_list():
+            item_options.append((iid, f"{iid} - {nombre}"))
+        current_item = self._config.get("save_point_item_id", "")
+        self._item_dropdown = SimpleDropdown(170, y, min(300, mw - 170), ROW_H, item_options, selected=current_item)
+        self._item_dropdown.parent = self._editor
+        self._editor.children.append(self._item_dropdown)
+        lbl_item = Label(PADDING, y, 160, ROW_H, "Item requerido:", font_size=12, color=(160, 170, 150))
+        lbl_item.parent = self._editor
+        self._editor.children.append(lbl_item)
         y += ROW_H + 4
 
         self._entity_input = self._add_field("Entidad save point:", self._config.get("save_point_entity_type", "maquina_escribir"), y, "save_point_entity_type")
@@ -130,24 +143,15 @@ class SaveSystemTab(BasePanel):
         return inp
 
     def _add_checkbox(self, label_text, checked, y, field_name):
-        lbl = Label(PADDING, y, 200, ROW_H, label_text, font_size=12, color=(160, 170, 150))
+        lbl = Label(PADDING, y, 160, ROW_H, label_text, font_size=12, color=(160, 170, 150))
         lbl.parent = self._editor
         self._editor.children.append(lbl)
 
-        box_w, box_h = 20, 20
-        box_x = 210
-        box_y = y + (ROW_H - box_h) // 2
-        btn = Button(box_x, box_y, box_w, box_h, "X" if checked else "",
-                     callback=lambda: self._toggle_checkbox(field_name, btn))
-        btn.parent = self._editor
-        self._editor.children.append(btn)
-        btn._checked = checked
-        btn._field_name = field_name
-        return btn
-
-    def _toggle_checkbox(self, field_name, btn):
-        btn._checked = not btn._checked
-        btn.text = "X" if btn._checked else ""
+        cb = Checkbox(170, y, checked=checked)
+        cb._field_name = field_name
+        cb.parent = self._editor
+        self._editor.children.append(cb)
+        return cb
 
     def _on_save(self):
         self._collect_fields()
@@ -175,6 +179,11 @@ class SaveSystemTab(BasePanel):
         self._status_lbl.color = (150, 200, 150)
 
     def _collect_fields(self):
+        if hasattr(self, '_item_dropdown'):
+            selected = self._item_dropdown.get_selected() or ""
+            self._config["save_point_item_id"] = selected
+            self._config.setdefault("validaciones", {})["requiere_item_para_guardar"] = bool(selected)
+
         for child in self._editor.children:
             if hasattr(child, '_field_name'):
                 fn = child._field_name
@@ -183,8 +192,6 @@ class SaveSystemTab(BasePanel):
                         self._config["slots"] = int(child.text)
                     except ValueError:
                         pass
-                elif fn == "save_point_item_id":
-                    self._config["save_point_item_id"] = child.text
                 elif fn == "save_point_entity_type":
                     self._config["save_point_entity_type"] = child.text
                 elif fn == "compress_level":
@@ -200,17 +207,18 @@ class SaveSystemTab(BasePanel):
                     items = [x.strip() for x in child.text.split(",") if x.strip()]
                     self._config.setdefault("schema", {})["include"] = items
 
-            if hasattr(child, '_checked') and hasattr(child, '_field_name'):
+            if isinstance(child, Checkbox) and hasattr(child, '_field_name'):
                 fn = child._field_name
                 if fn == "use_checksum":
-                    self._config.setdefault("validaciones", {})["use_checksum"] = child._checked
+                    self._config.setdefault("validaciones", {})["use_checksum"] = child.checked
                 elif fn == "item_se_consume":
-                    self._config.setdefault("validaciones", {})["item_se_consume"] = child._checked
+                    self._config.setdefault("validaciones", {})["item_se_consume"] = child.checked
                 elif fn == "dev_enabled":
-                    self._config.setdefault("dev_mode", {})["enabled"] = child._checked
+                    self._config.setdefault("dev_mode", {})["enabled"] = child.checked
 
     def on_activate(self):
         _load_config()
+        items_data._load_items()
         self._config = get_config()
         self._build_fields()
 

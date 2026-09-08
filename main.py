@@ -356,20 +356,32 @@ class EditorApp:
         os.makedirs(target)
 
         dirs = [
-            "configs", "data", "domain", "entities", "handlers",
-            "levels", "managers", "repositories", "runtime",
-            "scripts", "services", "systems", "utils",
+            "configs", "domain", "entities", "handlers",
+            "managers", "repositories", "runtime",
+            "services", "systems", "utils",
         ]
-        datas = ",".join(
-            f"(r'{os.path.join(orm_root, d)}', '{d}')" for d in dirs
-        )
-        assets_dir = os.path.join(orm_root, "assets")
-        has_assets = os.path.isdir(assets_dir) and any(
-            fname.lower().endswith((".png", ".jpg", ".gif", ".bmp"))
-            for fname in os.listdir(assets_dir)
-        )
-        if has_assets:
-            datas += f",(r'{assets_dir}', 'assets')"
+        datas_parts = [
+            f"(r'{os.path.join(orm_root, d)}', 'orm/{d}')" for d in dirs
+        ]
+
+        proj_data = os.path.join(proj.root, "data")
+        if os.path.isdir(proj_data):
+            datas_parts.append(f"(r'{proj_data}', 'orm/data')")
+        proj_levels = os.path.join(proj.root, "levels")
+        if os.path.isdir(proj_levels):
+            datas_parts.append(f"(r'{proj_levels}', 'orm/levels')")
+        proj_scripts = os.path.join(proj.root, "scripts")
+        if os.path.isdir(proj_scripts):
+            datas_parts.append(f"(r'{proj_scripts}', 'orm/scripts')")
+        proj_assets = os.path.join(proj.root, "assets")
+        if os.path.isdir(proj_assets):
+            datas_parts.append(f"(r'{proj_assets}', 'orm/assets')")
+
+        proj_manifest = os.path.join(proj.root, "cururo.json")
+        if os.path.exists(proj_manifest):
+            datas_parts.append(f"(r'{proj_manifest}', 'orm/cururo.json')")
+
+        datas = ",".join(datas_parts)
 
         spec = f"""# -*- mode: python ; coding: utf-8 -*-
 block_cipher = None

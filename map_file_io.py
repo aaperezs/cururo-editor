@@ -12,7 +12,7 @@ from editor.map_tab import MapTab
 from editor.map_model import (
     load_layer, save_layer, load_stacks, save_stacks,
     load_multi_tiles, save_multi_tiles, load_meta, save_meta,
-    scan_spawn_from_grid,
+    scan_spawn_from_grid, load_preload_onload,
 )
 
 
@@ -62,16 +62,16 @@ def load_map(tab: MapTab, map_id: str, maps_dir: str, stacks_dir: str) -> None:
     tab.stacks = load_stacks(map_id, stacks_dir)
     tab.multi_tiles = load_multi_tiles(map_id, maps_dir)
 
-    meta = load_meta(map_id, maps_dir)
-    if meta:
-        tab.spawn_pos = meta.get("spawn_pos")
-        tab.spawn_z = meta.get("spawn_z", 0)
+    tab.preload, tab.onload_events = load_preload_onload(map_id, stacks_dir)
 
-    if not tab.spawn_pos:
-        spawn_pos, spawn_z = scan_spawn_from_grid(tab)
-        if spawn_pos:
-            tab.spawn_pos = spawn_pos
-            tab.spawn_z = spawn_z
+    from editor.project import get_global_spawn
+    spawn = get_global_spawn()
+    if spawn and spawn.get("map_id") == map_id:
+        tab.spawn_pos = tuple(spawn["pos"])
+        tab.spawn_z = spawn.get("z", 0)
+    else:
+        tab.spawn_pos = None
+        tab.spawn_z = 0
 
 
 def resize_map(tab: MapTab, nuevo_w: int, nuevo_h: int) -> None:
@@ -105,20 +105,18 @@ def save_map(tab: MapTab, maps_dir: str, stacks_dir: str) -> None:
     for z, ls in tab.layers.items():
         save_layer(map_id, z, ls, maps_dir)
 
-    save_stacks(map_id, tab.stacks, stacks_dir)
+    save_stacks(map_id, tab.stacks, stacks_dir, tab.preload, tab.onload_events)
     save_multi_tiles(map_id, tab.multi_tiles, maps_dir)
 
-    spawn_pos, spawn_z = scan_spawn_from_grid(tab)
-    if spawn_pos:
-        tab.spawn_pos = spawn_pos
-        tab.spawn_z = spawn_z
-    elif tab.spawn_pos:
-        ls = tab.layers.get(tab.spawn_z)
-        if not ls or ls.grid.get(tab.spawn_pos) != "inicio":
-            tab.spawn_pos = None
-            tab.spawn_z = 0
+    from editor.project import get_global_spawn
+    spawn = get_global_spawn()
+    if spawn and spawn.get("map_id") == map_id:
+        tab.spawn_pos = tuple(spawn["pos"])
+        tab.spawn_z = spawn.get("z", 0)
+    else:
+        tab.spawn_pos = None
+        tab.spawn_z = 0
 
-    save_meta(map_id, tab.spawn_pos, tab.spawn_z, maps_dir)
     tab.dirty = False
 
 

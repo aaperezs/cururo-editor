@@ -62,8 +62,9 @@ OPTION_ACTION_FIELDS = {
     "desbloquear_habilidad": [("habilidad", "Habilidad:")],
     "increment_contador": [("contador_id", "Contador:"), ("cantidad", "Cantidad:")],
     "set_contador": [("contador_id", "Contador:"), ("valor", "Valor:")],
-    "save_game": [("slot", "Slot:")],
-    "load_game": [("slot", "Slot:")],
+    "open_save_menu": [],
+    "open_load_menu": [],
+    "close_save_menu": [],
     "iniciar_minijuego": [("minijuego_id", "Minijuego:")],
     "ir_a_escena": [("capitulo", "Capítulo:"), ("escena", "Escena:")],
     "mostrar_ventana": [("ventana_id", "Ventana:")],
@@ -823,9 +824,12 @@ class DialogTreePanel(BasePanel):
         self._save_current_flat_line()
         self._save_current_options()
         self._save_current_node()
-        # Also save flat version for legacy runtime
-        flat = compile_to_flat(*_parse_key(self._selected_key))
-        set_dialogo_by_key(self._selected_key, flat)
+        existing = get_dialogo_by_key(self._selected_key)
+        if isinstance(existing, dict) and existing.get("options"):
+            pass
+        else:
+            flat = compile_to_flat(*_parse_key(self._selected_key))
+            set_dialogo_by_key(self._selected_key, flat)
         self._dirty = False
         self._build_ui()
 
@@ -838,8 +842,12 @@ class DialogTreePanel(BasePanel):
             self._save_current_flat_line()
             self._save_current_options()
             self._save_current_node()
-            flat = compile_to_flat(*_parse_key(self._selected_key))
-            set_dialogo_by_key(self._selected_key, flat)
+            existing = get_dialogo_by_key(self._selected_key)
+            if isinstance(existing, dict) and existing.get("options"):
+                pass
+            else:
+                flat = compile_to_flat(*_parse_key(self._selected_key))
+                set_dialogo_by_key(self._selected_key, flat)
             self._dirty = False
 
     def _save_current_node(self):
@@ -901,6 +909,8 @@ class DialogTreePanel(BasePanel):
         nid = add_node(p, c, tipo, after_id=self._selected_nid)
         if nid:
             self._selected_nid = nid
+            self._selected_flat_idx = None
+            self._selected_child = None
             self._build_ui()
 
     def _add_choice(self):
@@ -1199,6 +1209,18 @@ class DialogTreePanel(BasePanel):
         self._dirty = True
         self._build_ui()
 
+    def _add_flat_option(self):
+        if not self._selected_key:
+            return
+        self._save_current_flat_line()
+        self._save_current_options()
+        options = get_dialogo_options_by_key(self._selected_key) or []
+        options.append({"text": "", "choices": []})
+        set_dialogo_options_by_key(self._selected_key, options)
+        self._selected_child = "options"
+        self._selected_nid = None
+        self._build_ui()
+
     def _move_flat_line(self, delta):
         if self._selected_flat_idx is None or not self._selected_key:
             return
@@ -1335,8 +1357,8 @@ class DialogTreePanel(BasePanel):
             if el == self._clone_btn: self._on_clone(); return True
             if el == self._del_btn: self._on_delete(); return True
             if el == self._save_btn: self._on_save(); return True
-            if el == self._add_dialogo_btn: self._on_add_node("dialogo"); return True
-            if el == self._add_opcion_btn: self._on_add_node("opcion"); return True
+            if el == self._add_dialogo_btn: self._add_flat_line(); return True
+            if el == self._add_opcion_btn: self._add_flat_option(); return True
             if el == self._add_condicion_btn: self._on_add_node("condicion"); return True
             if el == self._add_accion_btn: self._on_add_node("accion"); return True
             if el == self._add_salto_btn: self._on_add_node("salto"); return True

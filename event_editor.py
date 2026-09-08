@@ -7,6 +7,7 @@ from editor.widgets.button import Button
 from editor.widgets.label import Label
 from editor.widgets.panel import Panel
 from editor.widgets.event_editor_widget import EventEditorWidget, COL_BORDER, COL_ACCENT, COL_FIELD_BG
+from editor.widgets.map_properties_dialog import MapPropertiesDialog
 from editor.sprite_map import get_sprite_file
 from editor.project import get_current_project
 from editor.common.parser import CHAR_MAP, parsear_mapa
@@ -34,9 +35,12 @@ class EventEditorPanel(BasePanel):
         self._map_ancho = 0
         self._map_alto = 0
         self._stacks = {}
+        self._preload = {}
+        self._onload_events = []
         self._scroll_x = 0
         self._scroll_y = 0
         self._zoom = 1
+        self._props_dialog = None
 
         self._build_ui()
 
@@ -55,7 +59,11 @@ class EventEditorPanel(BasePanel):
         self._save_btn.parent = toolbar
         toolbar.children.append(self._save_btn)
 
-        self._map_label = Label(200, 4, 200, 28, "", font_size=13)
+        self._props_btn = Button(198, 4, 110, 28, "Propiedades", callback=self._open_map_properties)
+        self._props_btn.parent = toolbar
+        toolbar.children.append(self._props_btn)
+
+        self._map_label = Label(314, 4, 200, 28, "", font_size=13)
         self._map_label.parent = toolbar
         toolbar.children.append(self._map_label)
 
@@ -72,6 +80,28 @@ class EventEditorPanel(BasePanel):
 
     def _on_event_change(self):
         pass
+
+    def _open_map_properties(self):
+        """Abre el diálogo de propiedades del mapa."""
+        if not self._current_map_id:
+            return
+        ar = self.get_abs_rect()
+        dw, dh = 420, 280
+        dx = ar.x + (ar.w - dw) // 2
+        dy = ar.y + (ar.h - dh) // 2
+        self._props_dialog = MapPropertiesDialog(
+            dx, dy, dw, dh,
+            preload=self._preload,
+            onload_events=self._onload_events,
+            on_save=self._on_save_properties
+        )
+        self._props_dialog.parent = self
+        self._props_dialog.show()
+
+    def _on_save_properties(self, preload, onload_events):
+        """Callback cuando se guardan las propiedades del mapa."""
+        self._preload = preload
+        self._onload_events = onload_events
 
     def _open_map(self):
         import tkinter as tk
@@ -118,6 +148,8 @@ class EventEditorPanel(BasePanel):
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                self._preload = data.get("preload", {})
+                self._onload_events = data.get("onload_events", [])
                 self._stacks = {}
                 for s in data.get("stacks", []):
                     pos = tuple(s["pos"])
@@ -166,7 +198,11 @@ class EventEditorPanel(BasePanel):
         path = os.path.join(_stacks_dir(), f"{self._current_map_id}_stacks.json")
         os.makedirs(_stacks_dir(), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"stacks": stacks_list}, f, indent=2, ensure_ascii=False)
+            json.dump({
+                "preload": self._preload,
+                "onload_events": self._onload_events,
+                "stacks": stacks_list
+            }, f, indent=2, ensure_ascii=False)
         self._map_label.text = "Guardado OK"
 
     def set_selection(self, pos, z, sprite_id):
@@ -181,6 +217,10 @@ class EventEditorPanel(BasePanel):
     def handle_event(self, event):
         if not self.visible:
             return False
+
+        if self._props_dialog and self._props_dialog.visible:
+            if self._props_dialog.handle_event(event):
+                return True
 
         # If the widget handled it, stop here (prevents double-handling from super())
         if self._event_widget.handle_event(event):
@@ -273,3 +313,6 @@ class EventEditorPanel(BasePanel):
             pygame.draw.rect(surface, COL_ACCENT, (sx, sy, tile_size, tile_size), 3)
 
         surface.set_clip(clip)
+
+        if self._props_dialog and self._props_dialog.visible:
+            self._props_dialog.draw(surface)

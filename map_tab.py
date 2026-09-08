@@ -34,6 +34,8 @@ class MapTab:
         self.active_z = 0
         self.spawn_pos = None
         self.spawn_z = 0
+        self.preload = {}
+        self.onload_events = []
         self._max_undo = 50
 
     @property
@@ -82,6 +84,8 @@ class MapTab:
             "active_z": self.active_z,
             "spawn_pos": self.spawn_pos,
             "spawn_z": self.spawn_z,
+            "preload": copy.deepcopy(self.preload),
+            "onload_events": copy.deepcopy(self.onload_events),
         }
 
     def push_undo(self):
@@ -122,3 +126,5 @@ class MapTab:
         self.active_z = state["active_z"]
         self.spawn_pos = state.get("spawn_pos")
         self.spawn_z = state.get("spawn_z", 0)
+        self.preload = copy.deepcopy(state.get("preload", {}))
+        self.onload_events = copy.deepcopy(state.get("onload_events", []))

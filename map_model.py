@@ -228,7 +228,7 @@ def validar_stacks(stacks: Stacks) -> list[str]:
     return errores
 
 
-def save_stacks(map_id: str, stacks: Stacks, stacks_dir: str) -> str:
+def save_stacks(map_id: str, stacks: Stacks, stacks_dir: str, preload: dict = None, onload_events: list = None) -> str:
     """Guarda stacks (eventos) de un mapa. Valida referencias antes de escribir."""
     errores = validar_stacks(stacks)
     if errores:
@@ -243,8 +243,13 @@ def save_stacks(map_id: str, stacks: Stacks, stacks_dir: str) -> str:
         stacks_list.append(entry)
     os.makedirs(stacks_dir, exist_ok=True)
     path = os.path.join(stacks_dir, f"{map_id}_stacks.json")
+    output: dict[str, Any] = {"stacks": stacks_list}
+    if preload:
+        output["preload"] = preload
+    if onload_events:
+        output["onload_events"] = onload_events
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({"stacks": stacks_list}, f, indent=2, ensure_ascii=False)
+        json.dump(output, f, indent=2, ensure_ascii=False)
     return path
 
 
@@ -280,6 +285,19 @@ def load_stacks(map_id: str, stacks_dir: str) -> Stacks:
         return result
     except (json.JSONDecodeError, KeyError):
         return {}
+
+
+def load_preload_onload(map_id: str, stacks_dir: str) -> tuple[dict, list]:
+    """Carga preload y onload_events desde el stacks JSON."""
+    path = os.path.join(stacks_dir, f"{map_id}_stacks.json")
+    if not os.path.exists(path):
+        return {}, []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data: dict[str, Any] = json.load(f)
+        return data.get("preload", {}), data.get("onload_events", [])
+    except Exception:
+        return {}, []
 
 
 # ── Persistencia de multi_tiles ────────────────────────────
@@ -320,15 +338,7 @@ def load_multi_tiles(map_id: str, maps_dir: str) -> MultiTiles:
 # ── Persistencia de meta (spawn) ───────────────────────────
 
 def save_meta(map_id: str, spawn_pos: Coords | None, spawn_z: int, maps_dir: str) -> str | None:
-    """Guarda meta (spawn point) de un mapa."""
-    meta: dict[str, Any] = {}
-    if spawn_pos:
-        meta["spawn"] = {"pos": list(spawn_pos), "z": spawn_z}
-    if meta:
-        path = os.path.join(maps_dir, f"{map_id}_meta.json")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, indent=2, ensure_ascii=False)
-        return path
+    """Guarda meta de un mapa. Spawn se guarda en gameplay.json, no aquí."""
     return None
 
 
@@ -365,6 +375,8 @@ def erase_tile(tab: TabLike, ls: LayerLike, gx: int, gy: int) -> bool:
     if sid == "inicio" and tab.spawn_pos == (gx, gy):
         tab.spawn_pos = None
         tab.spawn_z = 0
+        from editor.project import set_global_spawn
+        set_global_spawn(None, None, 0)
     del ls.grid[(gx, gy)]
     return True
 

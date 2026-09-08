@@ -10,7 +10,7 @@ from editor.widgets.layer_panel import LayerPanel
 from editor.widgets.dialog import Dialog
 from editor.elements import get_element, is_multi_tile_element
 from editor.map_tab import MapTab
-from editor.project import get_current_project
+from editor.project import get_current_project, set_global_spawn
 from editor import workspace
 from editor.map_viewport import MapViewport
 from editor.map_tools import MapTools
@@ -44,12 +44,13 @@ class MapEditorPanel(BasePanel):
         self._tabs = {}
         self._tab_order = []
         self.viewport = MapViewport()
-        self.tools = MapTools(get_element_fn=get_element)
+        self.tools = MapTools(get_element_fn=get_element, on_spawn_change=self._set_spawn_global)
         self._grid_renderer = GridRenderer()
         self._paint_dragging = False
         self._drag_source = None
         self._drag_button = 0
         self._last_paint_pos = None
+        self._props_dialog = None
         self._build_ui()
 
         p = get_current_project()
@@ -67,9 +68,13 @@ class MapEditorPanel(BasePanel):
         self.clear()
 
         from editor.widgets.panel import Panel
-        toolbar = Panel(0, 0, self.rect.w, 36)
-        self.add(toolbar)
-        btns = build_toolbar(self, toolbar)
+        from editor.map_toolbar import ROW1_H, ROW2_H
+
+        toolbar_row1 = Panel(0, 0, self.rect.w, ROW1_H)
+        self.add(toolbar_row1)
+        toolbar_row2 = Panel(0, ROW1_H, self.rect.w, ROW2_H)
+        self.add(toolbar_row2)
+        btns = build_toolbar(self, toolbar_row1, toolbar_row2)
 
         self._new_btn = btns["new_btn"]
         self._open_btn = btns["open_btn"]
@@ -87,13 +92,13 @@ class MapEditorPanel(BasePanel):
         self._new_dialog = build_new_dialog(self)
         self._resize_dialog = build_resize_dialog(self)
 
-        tb_y = 36
+        tb_y = ROW1_H + ROW2_H
         tb_h = 26
         self._map_tab_bar = TabBar(0, tb_y, self.rect.w, tb_h, on_close_tab=self._close_tab)
         self.add(self._map_tab_bar)
 
         left_w = 130
-        palette_h = 170  # Reduced to fit tool buttons inside palette
+        palette_h = 170
         content_y = tb_y + tb_h
 
         self._palette = EntityPalette(0, content_y, left_w, palette_h)
@@ -300,9 +305,14 @@ class MapEditorPanel(BasePanel):
             tab = self._tabs.get(tid)
             if tab:
                 tab.active_z = tdata.get("active_z", 0)
-                sp = tdata.get("spawn_pos")
-                tab.spawn_pos = tuple(sp) if sp else None
-                tab.spawn_z = tdata.get("spawn_z", 0)
+        # Restore spawn from global gameplay.json
+        from editor.project import get_global_spawn
+        spawn = get_global_spawn()
+        if spawn and spawn.get("map_id"):
+            tab = self._tabs.get(spawn["map_id"])
+            if tab:
+                tab.spawn_pos = tuple(spawn["pos"])
+                tab.spawn_z = spawn.get("z", 0)
         # Restore active tab
         active = maps_data.get("active_tab")
         if active and active in self._tabs:
@@ -444,9 +454,7 @@ class MapEditorPanel(BasePanel):
         tab = self._current_tab
         if tab:
             tab.push_undo()
-            tab.spawn_pos = pos
-            tab.spawn_z = z
-            self._event_widget.set_spawn(pos, z)
+            self._set_spawn_global(pos, z)
             self._map_tab_bar.set_tab_label(tab.map_id, tab.label(), dirty=tab.dirty)
 
     def _on_clear_spawn(self):
@@ -455,8 +463,70 @@ class MapEditorPanel(BasePanel):
             tab.push_undo()
             tab.spawn_pos = None
             tab.spawn_z = 0
+            set_global_spawn(None, None, 0)
             self._event_widget.set_spawn(None, 0)
             self._map_tab_bar.set_tab_label(tab.map_id, tab.label(), dirty=tab.dirty)
+
+    def _open_map_properties(self):
+        """Abre el diálogo de propiedades del mapa."""
+        tab = self._current_tab
+        if not tab:
+            return
+        from editor.widgets.map_properties_dialog import MapPropertiesDialog
+        ar = self.get_abs_rect()
+        dw, dh = 420, 280
+        dx = ar.x + (ar.w - dw) // 2
+        dy = ar.y + (ar.h - dh) // 2
+        self._props_dialog = MapPropertiesDialog(
+            dx, dy, dw, dh,
+            preload=tab.preload,
+            onload_events=tab.onload_events,
+            on_save=self._on_save_properties
+        )
+        self._props_dialog.parent = self
+        self._props_dialog.show()
+
+    def _on_save_properties(self, preload, onload_events):
+        """Callback cuando se guardan las propiedades del mapa."""
+        tab = self._current_tab
+        if not tab:
+            return
+        tab.push_undo()
+        tab.preload = preload
+        tab.onload_events = onload_events
+        self._map_tab_bar.set_tab_label(tab.map_id, tab.label(), dirty=tab.dirty)
+
+    def _clear_spawn_from_other_maps(self, keep_map_id):
+        for tab in self._tabs.values():
+            if tab.map_id == keep_map_id:
+                continue
+            if tab.spawn_pos:
+                for z in tab.layer_order:
+                    ls = tab.layers.get(z)
+                    if ls:
+                        to_delete = [pos for pos, sid in ls.grid.items() if sid == "inicio"]
+                        for pos in to_delete:
+                            del ls.grid[pos]
+                tab.spawn_pos = None
+                tab.spawn_z = 0
+
+    def _remove_inicio_from_grid(self, tab):
+        for z in tab.layer_order:
+            ls = tab.layers.get(z)
+            if ls:
+                to_delete = [pos for pos, sid in ls.grid.items() if sid == "inicio"]
+                for pos in to_delete:
+                    del ls.grid[pos]
+
+    def _set_spawn_global(self, pos, z):
+        tab = self._current_tab
+        if not tab:
+            return
+        self._clear_spawn_from_other_maps(tab.map_id)
+        tab.spawn_pos = pos
+        tab.spawn_z = z
+        set_global_spawn(tab.map_id, pos, z)
+        self._event_widget.set_spawn(pos, z)
 
     def _on_event_change(self):
         tab = self._current_tab
@@ -562,15 +632,15 @@ class MapEditorPanel(BasePanel):
 
         if button == 1 and self._palette.selected_sprite_id is not None:
             selected = self._palette.selected_sprite_id
+            if selected == "inicio":
+                self._remove_inicio_from_grid(tab)
             if is_multi_tile_element(selected):
                 self._paint_multi_tile(tab, ls, gx, gy, selected)
             else:
                 ls.grid[(gx, gy)] = selected
             self._event_widget.set_selection((gx, gy), tab.active_z, selected)
             if selected == "inicio":
-                tab.spawn_pos = (gx, gy)
-                tab.spawn_z = tab.active_z
-                self._event_widget.set_spawn((gx, gy), tab.active_z)
+                self._set_spawn_global((gx, gy), tab.active_z)
         elif button == 3:
             anchor = self._is_multi_tile_anchor(tab, gx, gy, tab.active_z)
             if anchor:
@@ -596,12 +666,12 @@ class MapEditorPanel(BasePanel):
         replacement = self._palette.selected_sprite_id
         if replacement is None:
             return
+        if replacement == "inicio":
+            self._remove_inicio_from_grid(tab)
         modified = flood_fill(ls, gx, gy, replacement)
         for cx, cy in modified:
             if replacement == "inicio":
-                tab.spawn_pos = (cx, cy)
-                tab.spawn_z = tab.active_z
-                self._event_widget.set_spawn((cx, cy), tab.active_z)
+                self._set_spawn_global((cx, cy), tab.active_z)
 
     def _paint_drag_to(self, mx, my):
         tab = self._current_tab
@@ -639,14 +709,14 @@ class MapEditorPanel(BasePanel):
                     # Normal paint drag
                     elif self._drag_button == 1 and self._palette.selected_sprite_id is not None:
                         selected = self._palette.selected_sprite_id
+                        if selected == "inicio":
+                            self._remove_inicio_from_grid(tab)
                         if is_multi_tile_element(selected):
                             self._paint_multi_tile(tab, ls, ix, iy, selected)
                         else:
                             ls.grid[(ix, iy)] = selected
                         if selected == "inicio":
-                            tab.spawn_pos = (ix, iy)
-                            tab.spawn_z = tab.active_z
-                            self._event_widget.set_spawn((ix, iy), tab.active_z)
+                            self._set_spawn_global((ix, iy), tab.active_z)
                         tab.dirty = True
                     elif self._drag_button == 3:
                         anchor = self._is_multi_tile_anchor(tab, ix, iy, tab.active_z)
@@ -656,6 +726,7 @@ class MapEditorPanel(BasePanel):
                             if ls.grid[(ix, iy)] == "inicio" and tab.spawn_pos == (ix, iy):
                                 tab.spawn_pos = None
                                 tab.spawn_z = 0
+                                set_global_spawn(None, None, 0)
                                 self._event_widget.set_spawn(None, 0)
                             del ls.grid[(ix, iy)]
                             tab.dirty = True
@@ -678,6 +749,9 @@ class MapEditorPanel(BasePanel):
 
         if self._resize_dialog.visible:
             return self._resize_dialog.handle_event(event)
+
+        if self._props_dialog and self._props_dialog.visible:
+            return self._props_dialog.handle_event(event)
 
         # Paint/erase dragging — handle before anything else
         if self._paint_dragging:
@@ -779,6 +853,8 @@ class MapEditorPanel(BasePanel):
         if self._palette.selected_sprite_id is not None:
             tab.push_undo()
             selected = self._palette.selected_sprite_id
+            if selected == "inicio":
+                self._remove_inicio_from_grid(tab)
             if is_multi_tile_element(selected):
                 self._paint_multi_tile(tab, ls, gx, gy, selected)
             else:
@@ -786,9 +862,7 @@ class MapEditorPanel(BasePanel):
             self._event_widget.set_selection((gx, gy), tab.active_z, selected)
             # Auto-set spawn when placing inicio sprite
             if selected == "inicio":
-                tab.spawn_pos = (gx, gy)
-                tab.spawn_z = tab.active_z
-                self._event_widget.set_spawn((gx, gy), tab.active_z)
+                self._set_spawn_global((gx, gy), tab.active_z)
         else:
             self._event_widget.set_selection((gx, gy), tab.active_z, ls.grid.get((gx, gy)))
         # Sync eventos (filter by active z)
@@ -845,8 +919,7 @@ class MapEditorPanel(BasePanel):
 
         # Limpiar spawn si se movio el inicio
         if sid == "inicio" and tab.spawn_pos == (sx, sy):
-            tab.spawn_pos = (gx, gy)
-            tab.spawn_z = tab.active_z
+            self._set_spawn_global((gx, gy), tab.active_z)
 
         # Mover eventos en tab.stacks
         src_key = (sx, sy, tab.active_z)
@@ -897,6 +970,7 @@ class MapEditorPanel(BasePanel):
             if erased_sid == "inicio" and tab.spawn_pos == (gx, gy):
                 tab.spawn_pos = None
                 tab.spawn_z = 0
+                set_global_spawn(None, None, 0)
                 self._event_widget.set_spawn(None, 0)
             self._event_widget.set_selection(None, tab.active_z, None)
             self._map_tab_bar.set_tab_label(tab.map_id, tab.label(), dirty=tab.dirty)
@@ -955,3 +1029,6 @@ class MapEditorPanel(BasePanel):
 
         if self._resize_dialog.visible:
             self._resize_dialog.draw(surface)
+
+        if self._props_dialog and self._props_dialog.visible:
+            self._props_dialog.draw(surface)

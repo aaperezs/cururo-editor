@@ -1,0 +1,39 @@
+{
+  "save_system": {
+    "version": 1,
+    "slots": 10,
+    "slot_naming": "save_{n}",
+    "save_point_item_id": "",
+    "autosave_triggers": [],
+    "schema": {
+      "include": [
+        "snake", "inventario", "monedas", "flags", "contadores",
+        "shop_state", "nivel_actual", "posicion_mundo", "progreso_historia",
+        "camera", "habilidades", "segmentos_perdidos"
+      ],
+      "exclude": ["particles", "textos_flotantes_timer", "cache_sprites"]
+    },
+    "slot_metadata": [
+      "timestamp", "nivel_id", "posicion", "playtime_segundos",
+      "jefes_derrotados", "thumbnail_base64"
+    ],
+    "validaciones": {
+      "min_slots": 1,
+      "max_slots": 99,
+      "requiere_item_para_guardar": false,
+      "item_se_consume": false,
+      "thumbnail_size": [160, 90],
+      "compress_level": 6,
+      "use_checksum": true
+    },
+    "dev_mode": {
+      "enabled": true,
+      "spatial_save_dir": "workspace/saves/dev",
+      "no_item_required": true,
+      "no_checksum": true,
+      "uncompressed": true,
+      "hotkey_save": "F5",
+      "hotkey_load": "F9"
+    }
+  }
+}

@@ -50,6 +50,7 @@ def get_config():
 def set_config(cfg):
     global _CONFIG
     _CONFIG = copy.deepcopy(cfg)
+    _save_config()
 
 
 def get_field(field, default=None):
@@ -72,10 +73,6 @@ def validar_config(config):
     max_slots = validaciones.get("max_slots", 99)
     if min_slots > max_slots:
         errores.append("min_slots > max_slots")
-
-    item_id = config.get("save_point_item_id", "")
-    if not item_id:
-        errores.append("Item de guardado requerido")
 
     entity_type = config.get("save_point_entity_type", "")
     if not entity_type:

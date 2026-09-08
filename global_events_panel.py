@@ -8,6 +8,7 @@ import pygame
 
 from editor.panels.base_panel import BasePanel
 from editor.widgets.button import Button
+from editor.widgets.checkbox import Checkbox
 from editor.widgets.label import Label
 from editor.widgets.panel import Panel
 from editor.widgets.text_input import TextInput
@@ -473,45 +474,3 @@ class GlobalEventsTab(BasePanel):
 def copy_evento(evento):
     import copy
     return copy.deepcopy(evento)
-
-
-# ── Checkbox widget (sin dependencias externas) ──────────────────────────
-class Checkbox:
-    """Checkbox rectangular 22x22."""
-
-    def __init__(self, x, y, w=22, h=22, checked=False):
-        self.rect = pygame.Rect(x, y, w, h)
-        self.parent = None
-        self.visible = True
-        self.enabled = True
-        self.checked = checked
-        self.callback = None
-
-    def _abs_rect(self):
-        if self.parent:
-            pr = self.parent.get_abs_rect() if hasattr(self.parent, "get_abs_rect") else self.parent.rect
-            return pygame.Rect(pr.x + self.rect.x, pr.y + self.rect.y, self.rect.w, self.rect.h)
-        return self.rect.copy()
-
-    def handle_event(self, event):
-        if not self.visible or not self.enabled:
-            return False
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self._abs_rect().collidepoint(event.pos):
-                self.checked = not self.checked
-                if self.callback:
-                    self.callback(self.checked)
-                return True
-        return False
-
-    def draw(self, surface):
-        if not self.visible:
-            return
-        r = self._abs_rect()
-        pygame.draw.rect(surface, (30, 32, 36), r, border_radius=4)
-        pygame.draw.rect(surface, (60, 65, 75), r, 2, border_radius=4)
-        if self.checked:
-            pygame.draw.line(surface, (70, 130, 200),
-                             (r.x + 4, r.y + 8), (r.x + 14, r.y + 18), 3)
-            pygame.draw.line(surface, (70, 130, 200),
-                             (r.x + 14, r.y + 8), (r.x + 4, r.y + 18), 3)

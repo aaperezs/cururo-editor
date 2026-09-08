@@ -19,9 +19,13 @@ TOOLBAR_H = 36
 HEADER_H = 26
 LEFT_W = 220
 
-TIPO_OPTIONS = [("equipo", "Equipo"), ("objeto_clave", "Objeto Clave")]
+TIPO_OPTIONS = [("equipo", "Equipo"), ("objeto_clave", "Objeto Clave"), ("consumible", "Consumible")]
 SLOT_OPTIONS = [("cabeza", "Cabeza"), ("cuello", "Cuello"), ("cola", "Cola")]
 RAREZA_OPTIONS = [("comun", "Comun"), ("rara", "Rara"), ("epica", "Epica")]
+CONSUMIBLE_EFFECTS = [
+    ("recupera_pp", "Recupera PP"),
+    ("crece+1", "Crece +1 segmento"),
+]
 EFFECT_TYPES = [
     ("velocidad_extra", "Velocidad extra"),
     ("negar_terreno", "Negar terreno"),
@@ -149,6 +153,18 @@ class ItemTab(BasePanel):
         self._key_id_input = TextInput(90, cy, 200, 22, default="", max_chars=40, numeric_only=False)
         self._key_id_input.parent = cpanel; cpanel.children.append(self._key_id_input)
 
+        # --- Consumible panel ---
+        self._consumible_panel = Panel(0, y - PADDING, ep.rect.w, ep.rect.h - (y - PADDING),
+                                       bg_color=(35, 38, 46))
+        self._consumible_panel.parent = ep; ep.children.append(self._consumible_panel)
+        cspanel = self._consumible_panel
+
+        cy2 = PADDING
+        lbl = Label(PADDING, cy2, 80, 22, "Efecto:", font_size=12, color=(180, 185, 195))
+        lbl.parent = cspanel; cspanel.children.append(lbl)
+        self._efecto_selector = _SimpleDropdown(90, cy2, 180, 22, CONSUMIBLE_EFFECTS)
+        self._efecto_selector.parent = cspanel; cspanel.children.append(self._efecto_selector)
+
         self._apply_tipo_visibility()
 
     def _get_sprite_options(self):
@@ -215,11 +231,16 @@ class ItemTab(BasePanel):
     def _apply_tipo_visibility(self):
         if not hasattr(self, '_tipo_selector') or not self._tipo_selector:
             return
-        is_equipo = (self._tipo_selector.get_selected() == "equipo")
+        tipo = self._tipo_selector.get_selected()
+        is_equipo = (tipo == "equipo")
+        is_clave = (tipo == "objeto_clave")
+        is_consumible = (tipo == "consumible")
         if hasattr(self, '_equipo_panel') and self._equipo_panel:
             self._equipo_panel.visible = is_equipo
         if hasattr(self, '_clave_panel') and self._clave_panel:
-            self._clave_panel.visible = not is_equipo
+            self._clave_panel.visible = is_clave
+        if hasattr(self, '_consumible_panel') and self._consumible_panel:
+            self._consumible_panel.visible = is_consumible
 
     def _add_effect(self):
         self._effects.append({"tipo": "velocidad_extra", "valor": 1.0})
@@ -289,10 +310,17 @@ class ItemTab(BasePanel):
                         entry["valor"] = 2
                 effects.append(entry)
             data["efectos"] = effects
+            data["efecto"] = ""
+        elif data["tipo"] == "consumible":
+            data["slot"] = ""
+            data["rareza"] = "comun"
+            data["efectos"] = []
+            data["efecto"] = self._efecto_selector.get_selected() if (hasattr(self, '_efecto_selector') and self._efecto_selector) else ""
         else:
             data["slot"] = ""
             data["rareza"] = "comun"
             data["efectos"] = []
+            data["efecto"] = ""
         set_item(self._selected_id, data)
         self._dirty = False
         self._select_item(self._selected_id)
@@ -396,6 +424,8 @@ class ItemTab(BasePanel):
         self._rarity_selector.set_selected(data.get("rareza", "comun"))
         if hasattr(self, '_key_id_input') and self._key_id_input:
             self._key_id_input.text = data.get("key_id", "")
+        if hasattr(self, '_efecto_selector') and self._efecto_selector:
+            self._efecto_selector.set_selected(data.get("efecto", ""))
         self._apply_tipo_visibility()
 
     def _update_sprite_preview(self, sprite_id):

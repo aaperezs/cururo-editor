@@ -1,5 +1,6 @@
 from .base import Widget, Container
 from .button import Button
+from .checkbox import Checkbox
 from .label import Label
 from .panel import Panel
 from .tab_bar import TabBar

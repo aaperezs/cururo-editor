@@ -91,6 +91,7 @@ def create_item(iid):
         "rareza": "comun",
         "key_id": "",
         "efectos": [],
+        "efecto": "",
     }
     _ITEMS_DATA[iid] = data
     _save_items()

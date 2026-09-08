@@ -129,6 +129,49 @@ def get_current_project():
     return Project(_current_project_path)
 
 
+def _gameplay_path():
+    p = get_current_project()
+    if not p:
+        return None
+    return os.path.join(p.root, "data", "gameplay.json")
+
+
+def get_global_spawn():
+    path = _gameplay_path()
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            gameplay = json.load(f)
+        spawn = gameplay.get("spawn")
+        if spawn and spawn.get("map_id") and spawn.get("pos"):
+            return spawn
+        return None
+    except (json.JSONDecodeError, IOError):
+        return None
+
+
+def set_global_spawn(map_id, pos, z=0):
+    path = _gameplay_path()
+    if not path:
+        return False
+    gameplay = {}
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                gameplay = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            gameplay = {}
+    if map_id and pos:
+        gameplay["spawn"] = {"map_id": map_id, "pos": list(pos), "z": z}
+    else:
+        gameplay["spawn"] = {"map_id": None, "pos": None, "z": 0}
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(gameplay, f, indent=2, ensure_ascii=False)
+    return True
+
+
 def sys_path_setup(project_root):
     import sys
     root = os.path.abspath(project_root)

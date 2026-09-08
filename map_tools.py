@@ -28,7 +28,7 @@ from editor.map_model import (
 class MapTools:
     """Gestiona las herramientas de edición del mapa."""
 
-    def __init__(self, get_element_fn: GetElementFn | None = None) -> None:
+    def __init__(self, get_element_fn: GetElementFn | None = None, on_spawn_change=None) -> None:
         self.active_tool: str = "select"
         self.selected_sprite_id: str | None = None
         self.is_dragging: bool = False
@@ -36,6 +36,7 @@ class MapTools:
         self.last_paint_pos: Coords | None = None
         self.drag_source: tuple[int, int, str, int] | None = None  # (gx, gy, sprite_id, z)
         self._get_element: GetElementFn | None = get_element_fn
+        self._on_spawn_change = on_spawn_change
 
     def set_tool(self, tool: str) -> None:
         self.active_tool = tool
@@ -60,8 +61,8 @@ class MapTools:
             else:
                 paint_tile(ls, gx, gy, self.selected_sprite_id)
             if self.selected_sprite_id == "inicio":
-                tab.spawn_pos = (gx, gy)
-                tab.spawn_z = tab.active_z
+                if self._on_spawn_change:
+                    self._on_spawn_change((gx, gy), tab.active_z)
             tab.dirty = True
             return True
 
@@ -104,8 +105,8 @@ class MapTools:
             else:
                 paint_tile(ls, gx, gy, self.selected_sprite_id)
             if self.selected_sprite_id == "inicio":
-                tab.spawn_pos = (gx, gy)
-                tab.spawn_z = tab.active_z
+                if self._on_spawn_change:
+                    self._on_spawn_change((gx, gy), tab.active_z)
 
         # Click derecho = borrar
         elif button == 3:
@@ -151,8 +152,8 @@ class MapTools:
                         else:
                             paint_tile(ls, ix, iy, self.selected_sprite_id)
                         if self.selected_sprite_id == "inicio":
-                            tab.spawn_pos = (ix, iy)
-                            tab.spawn_z = tab.active_z
+                            if self._on_spawn_change:
+                                self._on_spawn_change((ix, iy), tab.active_z)
                         tab.dirty = True
                     elif self.drag_button == 3:
                         anchor = _is_multi_tile_anchor(tab, ix, iy, tab.active_z, self._get_element)
@@ -203,8 +204,8 @@ class MapTools:
         del ls.grid[(sx, sy)]
 
         if sid == "inicio" and tab.spawn_pos == (sx, sy):
-            tab.spawn_pos = (gx, gy)
-            tab.spawn_z = tab.active_z
+            if self._on_spawn_change:
+                self._on_spawn_change((gx, gy), tab.active_z)
 
         # Mover eventos
         src_key: Coords3 = (sx, sy, tab.active_z)
