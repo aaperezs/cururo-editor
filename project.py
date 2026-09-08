@@ -247,6 +247,12 @@ def create_project(template_id, project_name, target_dir, platform="desktop",
         else:
             shutil.copy2(src, dst)
 
+    # Copiar el motor al proyecto
+    engine_src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "engine")
+    engine_dst = os.path.join(target_dir, "engine")
+    if os.path.isdir(engine_src):
+        shutil.copytree(engine_src, engine_dst, dirs_exist_ok=True)
+
     manifest_path = os.path.join(target_dir, "cururo.json")
     if os.path.exists(manifest_path):
         with open(manifest_path, "r", encoding="utf-8") as f:

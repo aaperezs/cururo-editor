@@ -234,7 +234,7 @@ puedes invocar desde el árbol con la acción `run_script`
 
 ## 12. Probar y exportar
 
-- **Ctrl+R** *(Ejecutar)*: lanza `python orm/main.py --project <raiz>` en una
+- **Ctrl+R** *(Ejecutar)*: lanza `python project/engine/main.py --project <raiz>` en una
   consola nueva con el proyecto seleccionado.
 - **Ctrl+E** *(Exportar)*: genera un ejecutable (puede tardar varios minutos).
 

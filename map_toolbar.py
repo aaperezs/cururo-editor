@@ -93,16 +93,16 @@ def launch_game() -> None:
         return
     if getattr(sys, "frozen", False):
         meipass = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
-        runtime = os.path.join(meipass, "orm", "main.py")
+        runtime = os.path.join(meipass, "engine", "main.py")
         cwd = os.path.dirname(sys.executable)
         cmd = [sys.executable, "--runtime", "--project", p.root]
     else:
-        src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        runtime = os.path.join(src, "orm", "main.py")
-        cwd = src
+        # El motor vive en project/engine/
+        runtime = os.path.join(p.root, "engine", "main.py")
+        cwd = p.root
         cmd = [sys.executable, runtime, "--project", p.root]
     if not os.path.exists(runtime):
-        print(f"[EDITOR] No se encuentra el runtime en {runtime}")
+        print(f"[EDITOR] No se encuentra el motor en {runtime}")
         return
     try:
         subprocess.Popen(

@@ -345,9 +345,9 @@ class EditorApp:
             print("[Export] No hay proyecto abierto")
             return
         editor_root = os.path.dirname(os.path.abspath(__file__))
-        orm_root = os.path.join(os.path.dirname(editor_root), "orm")
-        if not os.path.exists(orm_root):
-            print(f"[Export] No se encuentra el runtime ORM en {orm_root}")
+        engine_root = os.path.join(editor_root, "engine")
+        if not os.path.exists(engine_root):
+            print(f"[Export] No se encuentra el motor en {engine_root}")
             return
         target = os.path.join(proj, "export")
         import subprocess, shutil
@@ -355,41 +355,34 @@ class EditorApp:
             shutil.rmtree(target)
         os.makedirs(target)
 
-        dirs = [
-            "configs", "domain", "entities", "handlers",
-            "managers", "repositories", "runtime",
-            "services", "systems", "utils",
-        ]
-        datas_parts = [
-            f"(r'{os.path.join(orm_root, d)}', 'orm/{d}')" for d in dirs
-        ]
+        # El motor vive en editor/engine/
+        engine_dst = os.path.join(target, "engine")
+        shutil.copytree(engine_root, engine_dst, dirs_exist_ok=True)
 
         proj_data = os.path.join(proj.root, "data")
         if os.path.isdir(proj_data):
-            datas_parts.append(f"(r'{proj_data}', 'orm/data')")
+            shutil.copytree(proj_data, os.path.join(target, "data"), dirs_exist_ok=True)
         proj_levels = os.path.join(proj.root, "levels")
         if os.path.isdir(proj_levels):
-            datas_parts.append(f"(r'{proj_levels}', 'orm/levels')")
+            shutil.copytree(proj_levels, os.path.join(target, "levels"), dirs_exist_ok=True)
         proj_scripts = os.path.join(proj.root, "scripts")
         if os.path.isdir(proj_scripts):
-            datas_parts.append(f"(r'{proj_scripts}', 'orm/scripts')")
+            shutil.copytree(proj_scripts, os.path.join(target, "scripts"), dirs_exist_ok=True)
         proj_assets = os.path.join(proj.root, "assets")
         if os.path.isdir(proj_assets):
-            datas_parts.append(f"(r'{proj_assets}', 'orm/assets')")
+            shutil.copytree(proj_assets, os.path.join(target, "assets"), dirs_exist_ok=True)
 
         proj_manifest = os.path.join(proj.root, "cururo.json")
         if os.path.exists(proj_manifest):
-            datas_parts.append(f"(r'{proj_manifest}', 'orm/cururo.json')")
-
-        datas = ",".join(datas_parts)
+            shutil.copy2(proj_manifest, os.path.join(target, "cururo.json"))
 
         spec = f"""# -*- mode: python ; coding: utf-8 -*-
 block_cipher = None
 a = Analysis(
-    ['main.py'],
-    pathex=[r'{orm_root}'],
+    [r'{os.path.join(engine_dst, "main.py")}'],
+    pathex=[r'{engine_dst}'],
     binaries=[],
-    datas=[{datas}],
+    datas=[],
     hiddenimports=['pygame'],
     hookspath=[],
     hooksconfig={{}},
@@ -403,7 +396,7 @@ a = Analysis(
 pyd = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyd, a.scripts, a.binaries, a.zipfiles, a.datas, [],
-    name='ORM',
+    name='{proj.name}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -429,7 +422,7 @@ exe = EXE(
                 [sys.executable, "-m", "PyInstaller", spec_path,
                  "--distpath", target, "--workpath",
                  os.path.join(target, ".build"), "--noconfirm"],
-                cwd=orm_root, capture_output=True, text=True, timeout=300
+                cwd=target, capture_output=True, text=True, timeout=300
             )
         except subprocess.TimeoutExpired:
             import tkinter.messagebox as mb
@@ -482,14 +475,14 @@ exe = EXE(
                 creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
             )
             return
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        main_py = os.path.join(root, "orm", "main.py")
+        # El motor vive en project/engine/
+        main_py = os.path.join(p.root, "engine", "main.py")
         if not os.path.exists(main_py):
-            print(f"[Menu] No se encuentra {main_py}")
+            print(f"[Menu] No se encuentra el motor en {main_py}")
             return
         subprocess.Popen(
             [sys.executable, main_py, "--project", p.root],
-            cwd=root,
+            cwd=p.root,
             creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
         )
 

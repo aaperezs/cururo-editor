@@ -385,6 +385,14 @@ class ElementTab(BasePanel):
         if not rename_element(self._selected_id, new_id):
             return
         maps_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "orm", "levels", "mapas")
+        # Si hay proyecto activo, usar sus mapas
+        try:
+            from editor.project import get_current_project
+            p = get_current_project()
+            if p:
+                maps_dir = os.path.join(p.root, "levels", "mapas")
+        except Exception:
+            pass
         updated = rename_element_maps(self._selected_id, new_id, maps_dir)
         if updated:
             print(f"  Actualizados {updated} archivo(s) de mapa")
