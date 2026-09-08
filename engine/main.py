@@ -31,6 +31,14 @@ else:
 
 import pygame
 
+# Capturar errores no atrapados para que la consola no se cierre de golpe
+def _excepthook(exc_type, exc_value, exc_tb):
+    import traceback
+    traceback.print_exception(exc_type, exc_value, exc_tb)
+    if sys.platform == "win32":
+        input("\nPresiona Enter para cerrar...")
+sys.excepthook = _excepthook
+
 # Set up project path for editor data modules
 try:
     from editor.project import set_current_project
@@ -84,7 +92,6 @@ from engine.systems.choice_box import ChoiceBox
 # ============================================
 # INICIALIZACIÓN
 # ============================================
-
 pygame.init()
 pygame.mixer.init(frequency=22050, size=-16, channels=8)
 
@@ -808,4 +815,6 @@ while True:
         break
 
 pygame.quit()
+if sys.platform == "win32":
+    input("Presiona Enter para cerrar...")
 
