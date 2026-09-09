@@ -159,7 +159,7 @@ reloj = pygame.time.Clock()
 
 def _alerta(titulo, detalle):
     """Pantalla de aviso que bloquea hasta que el usuario presiona una tecla."""
-    from display import get_buffer as _get_buffer, present as _present
+    from engine.display import get_buffer as _get_buffer, present as _present
     surf = _get_buffer()
     if surf is None:
         return
@@ -199,7 +199,8 @@ def _validar_proyecto():
         return ("Debes crear un mapa",
                 ["El proyecto no tiene mapas.", "Crea un mapa y configura el inicio del personaje en el editor."])
     
-    gameplay_path = os.path.join(os.path.dirname(__file__), "data", "gameplay.json")
+    from engine.project_paths import data_dir
+    gameplay_path = data_dir("gameplay.json")
     try:
         with open(gameplay_path, "r", encoding="utf-8") as f:
             gameplay = json.load(f)
