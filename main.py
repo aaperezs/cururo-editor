@@ -481,8 +481,10 @@ exe = EXE(
         if not os.path.exists(main_py):
             print(f"[Menu] No se encuentra el motor en {main_py}")
             return
+        # cmd /k mantiene la consola abierta al terminar/crashear el juego
+        cmd = ["cmd", "/k", sys.executable, main_py, "--project", p.root]
         subprocess.Popen(
-            [sys.executable, main_py, "--project", p.root],
+            cmd,
             cwd=editor_root,
             creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
         )

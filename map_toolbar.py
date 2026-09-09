@@ -101,7 +101,8 @@ def launch_game() -> None:
         editor_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         runtime = os.path.join(editor_root, "engine", "main.py")
         cwd = editor_root
-        cmd = [sys.executable, runtime, "--project", p.root]
+        # cmd /k mantiene la consola abierta al terminar/crashear el juego
+        cmd = ["cmd", "/k", sys.executable, runtime, "--project", p.root]
     if not os.path.exists(runtime):
         print(f"[EDITOR] No se encuentra el motor en {runtime}")
         return
